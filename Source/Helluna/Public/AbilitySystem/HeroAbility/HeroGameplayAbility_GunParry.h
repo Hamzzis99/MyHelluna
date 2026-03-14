@@ -149,8 +149,9 @@ private:
 	// 런타임 상태
 	// ═══════════════════════════════════════════════════════════
 
+	/** 처형 대상 적 — TObjectPtr로 GC 방지 (처형 중 소멸 방지) */
 	UPROPERTY()
-	TWeakObjectPtr<AHellunaEnemyCharacter> ParryTarget;
+	TObjectPtr<AHellunaEnemyCharacter> ParryTarget;
 
 	UPROPERTY()
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> ExecutionMontageTask;
