@@ -71,6 +71,16 @@ bool UHeroGameplayAbility_GunParry::TryParryInstead(UHellunaAbilitySystemCompone
 	if (!ASC || !Weapon) return false;
 	if (Weapon->FireMode == EWeaponFireMode::FullAuto) return false;
 	if (!Weapon->bCanParry) return false;
+
+	// [Fix: gun-parry-bug-001] TryActivateAbilityByTag는 실패해도 GAS 내부에서
+	// Shoot GA에 side effect를 일으킨다 (태그 충돌/Prediction 롤백 등).
+	// 적이 범위 내에 없으면 아예 호출하지 않도록 사전 체크.
+	const AHellunaHeroCharacter* Hero = Cast<AHellunaHeroCharacter>(ASC->GetAvatarActor());
+	if (!Hero) return false;
+
+	// 패링 가능한 적이 근처에 있는지 경량 체크 (FindParryableEnemy 재활용)
+	if (!FindParryableEnemyStatic(Hero)) return false;
+
 	return ASC->TryActivateAbilityByTag(HellunaGameplayTags::Player_Ability_GunParry);
 }
 
@@ -404,6 +414,68 @@ AHellunaEnemyCharacter* UHeroGameplayAbility_GunParry::FindParryableEnemy(const 
 			continue;
 
 		// 가장 가까운 적 선택
+		const float DistSq = FVector::DistSquared(HeroLocation, Enemy->GetActorLocation());
+		if (DistSq < BestDistSq)
+		{
+			BestDistSq = DistSq;
+			BestEnemy = Enemy;
+		}
+	}
+
+	return BestEnemy;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FindParryableEnemyStatic — TryParryInstead용 사전 체크
+// TryActivateAbilityByTag의 GAS side effect를 방지하기 위해
+// 적이 없으면 호출 자체를 하지 않도록 하는 경량 체크
+// ═══════════════════════════════════════════════════════════
+
+AHellunaEnemyCharacter* UHeroGameplayAbility_GunParry::FindParryableEnemyStatic(const AHellunaHeroCharacter* Hero)
+{
+	if (!Hero) return nullptr;
+
+	UWorld* World = Hero->GetWorld();
+	if (!World) return nullptr;
+
+	// 기본값 사용 (에디터 설정값은 인스턴스에만 있으므로)
+	constexpr float DetectionRange = 300.f;
+	constexpr float HalfAngleDeg = 60.f;
+
+	const FVector HeroLocation = Hero->GetActorLocation();
+	const FVector HeroForward = Hero->GetActorForwardVector();
+	const float CosHalfAngle = FMath::Cos(FMath::DegreesToRadians(HalfAngleDeg));
+
+	AHellunaEnemyCharacter* BestEnemy = nullptr;
+	float BestDistSq = DetectionRange * DetectionRange;
+
+	TArray<FOverlapResult> Overlaps;
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(DetectionRange);
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(Hero);
+
+	if (!World->OverlapMultiByObjectType(
+		Overlaps, HeroLocation, FQuat::Identity,
+		FCollisionObjectQueryParams(ECC_Pawn), Sphere, Params))
+	{
+		return nullptr;
+	}
+
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AHellunaEnemyCharacter* Enemy = Cast<AHellunaEnemyCharacter>(Overlap.GetActor());
+		if (!Enemy) continue;
+		if (!Enemy->bCanBeParried) continue;
+
+		const FVector ToEnemy = (Enemy->GetActorLocation() - HeroLocation).GetSafeNormal();
+		if (FVector::DotProduct(HeroForward, ToEnemy) < CosHalfAngle) continue;
+
+		if (!UHellunaFunctionLibrary::NativeDoesActorHaveTag(Enemy, HellunaGameplayTags::Enemy_Ability_Parryable))
+			continue;
+
+		if (UHellunaFunctionLibrary::NativeDoesActorHaveTag(Enemy, HellunaGameplayTags::Enemy_State_AnimLocked))
+			continue;
+
 		const float DistSq = FVector::DistSquared(HeroLocation, Enemy->GetActorLocation());
 		if (DistSq < BestDistSq)
 		{
