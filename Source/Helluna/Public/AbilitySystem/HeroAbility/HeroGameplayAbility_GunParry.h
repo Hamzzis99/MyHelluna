@@ -71,6 +71,18 @@ protected:
 		meta = (DisplayName = "처형 거리", ClampMin = "50.0", ClampMax = "300.0"))
 	float ExecutionDistance = 100.f;
 
+	/** 워프 위치를 적 기준 어디로 할지 (0=정면, 90=옆, 180=뒤)
+	 *  BP에서 무기별로 다르게 세팅 가능 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
+		meta = (DisplayName = "워프 각도 오프셋(도)", ClampMin = "0.0", ClampMax = "360.0",
+			ToolTip = "0=적 정면, 90=적 옆, 180=적 뒤. 권총은 180(뒤통수), 샷건은 0(정면) 등"))
+	float WarpAngleOffset = 180.f;
+
+	/** 워프 후 플레이어가 적을 바라보도록 회전할지 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
+		meta = (DisplayName = "워프 후 적 방향 회전"))
+	bool bFaceEnemyAfterWarp = true;
+
 	/** 처형 후 넉백 강도 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|PostExecution",
 		meta = (DisplayName = "넉백 강도", ClampMin = "0.0", ClampMax = "2000.0"))
