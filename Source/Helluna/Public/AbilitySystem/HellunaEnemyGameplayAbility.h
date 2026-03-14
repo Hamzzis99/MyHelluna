@@ -39,7 +39,16 @@ public:
 			EditCondition = "bOpensParryWindow"))
 	float ParryWindowDuration = 0.4f;
 
+protected:
+	/** 패링 윈도우 열기 — bOpensParryWindow + bCanBeParried 체크 후 태그 부여 + 타이머 */
+	void TryOpenParryWindow();
+
+	/** 패링 윈도우 닫기 — 태그 제거 + 타이머 정리 */
+	void CloseParryWindow();
+
 private:
+	FTimerHandle ParryWindowTimerHandle;
+
 	TWeakObjectPtr<AHellunaEnemyCharacter> CachedHellunaEnemyCharacter;
 
 };

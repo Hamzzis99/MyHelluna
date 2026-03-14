@@ -39,6 +39,9 @@ void UEnemyGameplayAbility_Attack::ActivateAbility(
 		ASC->AddLooseGameplayTags(AttackingTag);
 	}
 
+	// 건패링 윈도우 열기 (bOpensParryWindow + bCanBeParried 체크는 내부에서 처리)
+	TryOpenParryWindow();
+
 	UAnimMontage* AttackMontage = Enemy->AttackMontage;
 	if (!AttackMontage)
 	{
@@ -178,6 +181,9 @@ void UEnemyGameplayAbility_Attack::EndAbility(
 			}
 		}
 	}
+
+	// 건패링 윈도우 정리 (안전장치)
+	CloseParryWindow();
 
 	// ★ State.Enemy.Attacking 태그 제거
 	// 이 태그가 제거되어야 StateTree가 Attack → Run(Chase) 전환을 허용한다.
