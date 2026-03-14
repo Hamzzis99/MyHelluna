@@ -249,6 +249,22 @@ void AHellunaEnemyCharacter::Multicast_PlayHitReact_Implementation()
 }
 
 // ============================================================
+// Multicast_PlayParryVictim — 건패링 처형 피격 몽타주 (모든 클라이언트)
+// ============================================================
+void AHellunaEnemyCharacter::Multicast_PlayParryVictim_Implementation()
+{
+	if (!ParryVictimMontage) return;
+
+	USkeletalMeshComponent* SkelMesh = GetMesh();
+	if (!SkelMesh) return;
+
+	UAnimInstance* AnimInst = SkelMesh->GetAnimInstance();
+	if (!AnimInst) return;
+
+	AnimInst->Montage_Play(ParryVictimMontage, 1.0f);
+}
+
+// ============================================================
 // Multicast_PlayDeath — 사망 몽타주 (모든 클라이언트)
 // ============================================================
 void AHellunaEnemyCharacter::Multicast_PlayDeath_Implementation()

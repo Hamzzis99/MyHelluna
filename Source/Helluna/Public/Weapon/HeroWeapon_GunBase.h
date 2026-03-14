@@ -94,6 +94,20 @@ public:
 
 	const FGunAnimationSet& GetAnimSet() const { return GunAnimSet; }
 
+	// ═══════════════════════════════════════════════════════════
+	// 건패링 관련
+	// ═══════════════════════════════════════════════════════════
+
+	/** 이 무기로 건패링이 가능한지 (핸드건, 샷건 등에서 true) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "건패링 가능"))
+	bool bCanParry = false;
+
+	/** 무기 타입별 처형 몽타주 (플레이어 측 - 무기마다 다른 연출) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "패링 처형 몽타주 (플레이어)"))
+	TObjectPtr<UAnimMontage> ParryExecutionMontage = nullptr;
+
 
 protected:
 
