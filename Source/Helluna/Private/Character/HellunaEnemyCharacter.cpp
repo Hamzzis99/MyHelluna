@@ -13,6 +13,7 @@
 #include "GameplayTagContainer.h"
 #include "AIController.h"
 #include "DebugHelper.h"
+#include "AbilitySystem/HeroAbility/HeroGameplayAbility_GunParry.h"
 
 // 타이머 기반 Trace 시스템용 헤더
 #include "DrawDebugHelpers.h"
@@ -237,6 +238,9 @@ void AHellunaEnemyCharacter::OnMonsterHealthChanged(
 // ============================================================
 void AHellunaEnemyCharacter::Multicast_PlayHitReact_Implementation()
 {
+	// [GunParry] 처형 중 피격 모션 차단
+	if (UHeroGameplayAbility_GunParry::ShouldBlockHitReact(this)) return;
+
 	if (!HitReactMontage) return;
 
 	USkeletalMeshComponent* SkelMesh = GetMesh();

@@ -36,6 +36,7 @@
 
 #include "DebugHelper.h"
 #include "Helluna.h"  // [Step3] HELLUNA_DEBUG_HERO 매크로 (EndPlay/Input/Weapon/Repair 디버그 로그)
+#include "AbilitySystem/HeroAbility/HeroGameplayAbility_GunParry.h"
 #include "Animation/AnimInstance.h"
 #include "Character/EnemyComponent/HellunaHealthComponent.h"
 
@@ -1088,6 +1089,9 @@ void AHellunaHeroCharacter::OnHeroDeath(AActor* DeadActor, AActor* KillerActor)
 
 void AHellunaHeroCharacter::Multicast_PlayHeroHitReact_Implementation()
 {
+	// [GunParry] 무적 상태 피격 모션 차단
+	if (UHeroGameplayAbility_GunParry::ShouldBlockDamage(this)) return;
+
 	if (!HitReactMontage) return;
 
 	USkeletalMeshComponent* SkelMesh = GetMesh();

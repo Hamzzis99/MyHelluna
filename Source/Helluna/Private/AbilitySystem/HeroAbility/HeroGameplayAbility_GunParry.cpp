@@ -18,6 +18,7 @@
 #include "DebugHelper.h"
 
 #include "Kismet/KismetSystemLibrary.h"
+#include "Engine/OverlapResult.h"
 #include "GameMode/HellunaDefenseGameMode.h"
 #include "Character/EnemyComponent/HellunaHealthComponent.h"
 
@@ -31,7 +32,7 @@ UHeroGameplayAbility_GunParry::UHeroGameplayAbility_GunParry()
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 
-	AbilityTags.AddTag(HellunaGameplayTags::Player_Ability_GunParry);
+	SetAssetTags(FGameplayTagContainer(HellunaGameplayTags::Player_Ability_GunParry));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -41,18 +42,20 @@ UHeroGameplayAbility_GunParry::UHeroGameplayAbility_GunParry()
 bool UHeroGameplayAbility_GunParry::ShouldBlockDamage(const AActor* Target)
 {
 	if (!Target) return false;
-	return UHellunaFunctionLibrary::NativeDoesActorHaveTag(Target, HellunaGameplayTags::Player_State_Invincible)
-		|| UHellunaFunctionLibrary::NativeDoesActorHaveTag(Target, HellunaGameplayTags::Player_State_PostParryInvincible);
+	AActor* MutableTarget = const_cast<AActor*>(Target);
+	return UHellunaFunctionLibrary::NativeDoesActorHaveTag(MutableTarget, HellunaGameplayTags::Player_State_Invincible)
+		|| UHellunaFunctionLibrary::NativeDoesActorHaveTag(MutableTarget, HellunaGameplayTags::Player_State_PostParryInvincible);
 }
 
 bool UHeroGameplayAbility_GunParry::ShouldBlockHitReact(const AActor* Target)
 {
 	if (!Target) return false;
+	AActor* MutableTarget = const_cast<AActor*>(Target);
 	// 적: AnimLocked (처형 중 피격 모션 차단)
-	if (UHellunaFunctionLibrary::NativeDoesActorHaveTag(Target, HellunaGameplayTags::Enemy_State_AnimLocked))
+	if (UHellunaFunctionLibrary::NativeDoesActorHaveTag(MutableTarget, HellunaGameplayTags::Enemy_State_AnimLocked))
 		return true;
 	// 플레이어: Invincible (처형 중 무적)
-	if (UHellunaFunctionLibrary::NativeDoesActorHaveTag(Target, HellunaGameplayTags::Player_State_Invincible))
+	if (UHellunaFunctionLibrary::NativeDoesActorHaveTag(MutableTarget, HellunaGameplayTags::Player_State_Invincible))
 		return true;
 	return false;
 }
@@ -60,7 +63,7 @@ bool UHeroGameplayAbility_GunParry::ShouldBlockHitReact(const AActor* Target)
 bool UHeroGameplayAbility_GunParry::ShouldDeferDeath(const AActor* Enemy)
 {
 	if (!Enemy) return false;
-	return UHellunaFunctionLibrary::NativeDoesActorHaveTag(Enemy, HellunaGameplayTags::Enemy_State_AnimLocked);
+	return UHellunaFunctionLibrary::NativeDoesActorHaveTag(const_cast<AActor*>(Enemy), HellunaGameplayTags::Enemy_State_AnimLocked);
 }
 
 bool UHeroGameplayAbility_GunParry::TryParryInstead(UHellunaAbilitySystemComponent* ASC, const AHeroWeapon_GunBase* Weapon)
