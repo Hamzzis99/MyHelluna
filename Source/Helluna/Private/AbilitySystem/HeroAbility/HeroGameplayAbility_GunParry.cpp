@@ -178,12 +178,21 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 	// 4) 적 이동 잠금
 	Enemy->LockMovementAndFaceTarget(Hero);
 
-	// 5) Motion Warping — 적 정면 ExecutionDistance 위치로 이동
+	// 5) Motion Warping — WarpAngleOffset에 따라 적 주변 위치로 이동
+	//    0=적 정면, 90=옆, 180=뒤 (BP에서 설정)
 	if (UMotionWarpingComponent* WarpComp = Hero->FindComponentByClass<UMotionWarpingComponent>())
 	{
 		const FVector EnemyForward = Enemy->GetActorForwardVector();
-		const FVector WarpLocation = Enemy->GetActorLocation() + EnemyForward * ExecutionDistance;
-		const FRotator WarpRotation = (-EnemyForward).Rotation(); // 적을 마주보는 방향
+		const FVector EnemyLocation = Enemy->GetActorLocation();
+
+		// WarpAngleOffset 적용: 적 전방 기준으로 회전
+		const FVector OffsetDir = EnemyForward.RotateAngleAxis(WarpAngleOffset, FVector::UpVector);
+		const FVector WarpLocation = EnemyLocation + OffsetDir * ExecutionDistance;
+
+		// 워프 후 회전: bFaceEnemyAfterWarp이면 적을 바라봄
+		const FRotator WarpRotation = bFaceEnemyAfterWarp
+			? (EnemyLocation - WarpLocation).Rotation()
+			: Hero->GetActorRotation();
 
 		FMotionWarpingTarget WarpTarget;
 		WarpTarget.Name = WarpTargetName;
