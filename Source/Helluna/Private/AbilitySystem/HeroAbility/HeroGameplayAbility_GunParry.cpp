@@ -116,8 +116,10 @@ bool UHeroGameplayAbility_GunParry::CanActivateAbility(
 	if (!Weapon->bCanParry) { UE_LOG(LogGunParry, Warning, TEXT("[CanActivate] bCanParry=false")); return false; }
 	if (!Weapon->CanFire()) { UE_LOG(LogGunParry, Warning, TEXT("[CanActivate] CanFire=false (탄약 없음)")); return false; }
 
+	const bool bIsServerSide = Hero->HasAuthority();
 	AHellunaEnemyCharacter* FoundEnemy = FindParryableEnemy(Hero);
-	UE_LOG(LogGunParry, Warning, TEXT("[CanActivate] FindParryableEnemy → %s"),
+	UE_LOG(LogGunParry, Warning, TEXT("[CanActivate] %s: FindParryableEnemy → %s"),
+		bIsServerSide ? TEXT("SERVER") : TEXT("CLIENT"),
 		FoundEnemy ? *FoundEnemy->GetName() : TEXT("nullptr"));
 	return FoundEnemy != nullptr;
 }
@@ -324,63 +326,63 @@ void UHeroGameplayAbility_GunParry::OnExecutionMontageInterrupted()
 
 void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 {
-	UE_LOG(LogGunParry, Warning, TEXT("══════════════════════════════════════════"));
-	UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] 시작 — bCancelled=%d"), bWasCancelled);
-
 	AHellunaHeroCharacter* Hero = GetHeroCharacterFromActorInfo();
-	AHellunaEnemyCharacter* Enemy = ParryTarget;  // TObjectPtr — GC 방지됨
+	AHellunaEnemyCharacter* Enemy = ParryTarget;
+	const bool bIsServer = Hero && Hero->HasAuthority();
 
-	UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Hero=%s, Enemy=%s"),
+	UE_LOG(LogGunParry, Warning, TEXT("══════════════════════════════════════════"));
+	UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s — bCancelled=%d, Hero=%s, Enemy=%s"),
+		bIsServer ? TEXT("SERVER") : TEXT("CLIENT"), bWasCancelled,
 		Hero ? *Hero->GetName() : TEXT("nullptr"),
 		Enemy ? *Enemy->GetName() : TEXT("nullptr"));
 
-	// --- 서버: 적 사망 처리 ---
-	if (Hero && Hero->HasAuthority() && Enemy)
+	// ═══════════════════════════════════════════════════════════
+	// 서버 전용: 적 사망 + 태그 정리 + 넉백
+	// (클라이언트에서는 절대 실행하지 않음)
+	// ═══════════════════════════════════════════════════════════
+	if (bIsServer && !bWasCancelled)
 	{
-		if (UHellunaHealthComponent* HealthComp = Enemy->FindComponentByClass<UHellunaHealthComponent>())
+		// 적 사망 처리
+		if (Enemy)
 		{
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] 적 HP=%.1f → 0으로 설정"), HealthComp->GetHealth());
-			HealthComp->SetHealth(0.f);
-		}
-
-		if (UWorld* World = Hero->GetWorld())
-		{
-			if (AGameModeBase* GM = World->GetAuthGameMode())
+			if (UHellunaHealthComponent* HealthComp = Enemy->FindComponentByClass<UHellunaHealthComponent>())
 			{
-				if (auto* DefenseGM = Cast<AHellunaDefenseGameMode>(GM))
+				UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 적 HP=%.1f → 0"), HealthComp->GetHealth());
+				HealthComp->SetHealth(0.f);
+			}
+
+			if (UWorld* World = Hero->GetWorld())
+			{
+				if (auto* DefenseGM = Cast<AHellunaDefenseGameMode>(World->GetAuthGameMode()))
 				{
 					DefenseGM->NotifyMonsterDied(Enemy);
-					UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] NotifyMonsterDied 호출"));
+					UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: NotifyMonsterDied"));
 				}
 			}
+
+			Enemy->DespawnMassEntityOnServer(TEXT("GunParry"));
+			Enemy->SetLifeSpan(0.5f);
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: DespawnMassEntity + SetLifeSpan(0.5)"));
 		}
 
-		Enemy->DespawnMassEntityOnServer(TEXT("GunParry"));
-		Enemy->SetLifeSpan(0.5f);
-		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] DespawnMassEntity + SetLifeSpan(0.5)"));
-	}
-
-	// --- 적 AnimLocked 해제 ---
-	if (Enemy)
-	{
-		if (UHellunaAbilitySystemComponent* EnemyASC = Enemy->GetHellunaAbilitySystemComponent())
+		// 적 AnimLocked 해제 (서버 태그이므로 서버에서만)
+		if (Enemy)
 		{
-			EnemyASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_AnimLocked);
+			if (UHellunaAbilitySystemComponent* EnemyASC = Enemy->GetHellunaAbilitySystemComponent())
+			{
+				EnemyASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_AnimLocked);
+			}
+			Enemy->UnlockMovement();
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: Enemy AnimLocked 해제"));
 		}
-		Enemy->UnlockMovement();
-		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Enemy AnimLocked 해제 + UnlockMovement"));
-	}
 
-	// --- 플레이어 태그 정리 + 넉백 ---
-	if (Hero)
-	{
+		// 플레이어 서버 태그 정리
 		if (UHellunaAbilitySystemComponent* HeroASC = Hero->GetHellunaAbilitySystemComponent())
 		{
 			HeroASC->RemoveStateTag(HellunaGameplayTags::Player_State_ParryExecution);
 			HeroASC->RemoveStateTag(HellunaGameplayTags::Player_State_Invincible);
 
 			HeroASC->AddStateTag(HellunaGameplayTags::Player_State_PostParryInvincible);
-
 			if (UWorld* World = Hero->GetWorld())
 			{
 				World->GetTimerManager().SetTimer(
@@ -388,30 +390,39 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 					[WeakASC = TWeakObjectPtr<UHellunaAbilitySystemComponent>(HeroASC)]()
 					{
 						if (WeakASC.IsValid())
-						{
 							WeakASC->RemoveStateTag(HellunaGameplayTags::Player_State_PostParryInvincible);
-						}
 					},
-					PostParryInvincibleDuration,
-					false
+					PostParryInvincibleDuration, false
 				);
 			}
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Hero 태그 정리 + PostParryInvincible(%.1f초)"), PostParryInvincibleDuration);
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 태그 정리 + PostParryInvincible(%.1f초)"), PostParryInvincibleDuration);
 		}
 
-		if (Hero->HasAuthority() && Enemy)
+		// 넉백
+		if (Enemy)
 		{
 			FVector KnockbackDir = (Hero->GetActorLocation() - Enemy->GetActorLocation()).GetSafeNormal();
 			KnockbackDir.Z = 0.2f;
 			KnockbackDir.Normalize();
 			Hero->LaunchCharacter(KnockbackDir * PostParryKnockbackStrength, true, true);
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] 넉백 적용 (%.0f)"), PostParryKnockbackStrength);
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 넉백 적용 (%.0f)"), PostParryKnockbackStrength);
 		}
+	}
+	else if (bIsServer && bWasCancelled)
+	{
+		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bCancelled=true → 적 처리/태그 정리 스킵"));
+	}
 
+	// ═══════════════════════════════════════════════════════════
+	// 클라이언트+서버 공통: 이동 잠금 해제 + 카메라 원복
+	// ═══════════════════════════════════════════════════════════
+	if (Hero)
+	{
 		Hero->UnlockMoveInput();
 		Hero->UnlockLookInput();
 		EndCameraEffect(Hero);
-		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Hero 잠금 해제 + 카메라 원복"));
+		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s: 잠금 해제 + 카메라 원복"),
+			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 	}
 
 	ParryTarget = nullptr;
@@ -421,7 +432,8 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
 	const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, bWasCancelled);
-	UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] EndAbility 호출 완료"));
+	UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s: EndAbility 완료"),
+		bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 	UE_LOG(LogGunParry, Warning, TEXT("══════════════════════════════════════════"));
 }
 
@@ -477,22 +489,42 @@ AHellunaEnemyCharacter* UHeroGameplayAbility_GunParry::FindParryableEnemy(const 
 		return nullptr;
 	}
 
-	UE_LOG(LogGunParry, Verbose, TEXT("[FindParryableEnemy] Overlap 결과: %d개"), Overlaps.Num());
+	UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] Overlap 결과: %d개"), Overlaps.Num());
 
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
 		AHellunaEnemyCharacter* Enemy = Cast<AHellunaEnemyCharacter>(Overlap.GetActor());
 		if (!Enemy) continue;
-		if (!Enemy->bCanBeParried) continue;
+
+		// 각 조건별 실패 원인 디버그
+		if (!Enemy->bCanBeParried)
+		{
+			UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] %s: bCanBeParried=false → 스킵"), *Enemy->GetName());
+			continue;
+		}
 
 		const FVector ToEnemy = (Enemy->GetActorLocation() - HeroLocation).GetSafeNormal();
-		if (FVector::DotProduct(HeroForward, ToEnemy) < CosHalfAngle) continue;
-
-		if (!UHellunaFunctionLibrary::NativeDoesActorHaveTag(Enemy, HellunaGameplayTags::Enemy_Ability_Parryable))
+		const float DotResult = FVector::DotProduct(HeroForward, ToEnemy);
+		if (DotResult < CosHalfAngle)
+		{
+			UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] %s: 전방각 밖 (Dot=%.2f < Cos=%.2f) → 스킵"),
+				*Enemy->GetName(), DotResult, CosHalfAngle);
 			continue;
+		}
+
+		const bool bHasParryable = UHellunaFunctionLibrary::NativeDoesActorHaveTag(Enemy, HellunaGameplayTags::Enemy_Ability_Parryable);
+		if (!bHasParryable)
+		{
+			UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] %s: Parryable 태그 없음 (bEnraged=%d) → 스킵"),
+				*Enemy->GetName(), Enemy->bEnraged);
+			continue;
+		}
 
 		if (UHellunaFunctionLibrary::NativeDoesActorHaveTag(Enemy, HellunaGameplayTags::Enemy_State_AnimLocked))
+		{
+			UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] %s: AnimLocked → 스킵"), *Enemy->GetName());
 			continue;
+		}
 
 		const float DistSq = FVector::DistSquared(HeroLocation, Enemy->GetActorLocation());
 		if (DistSq < BestDistSq)
@@ -576,18 +608,18 @@ void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Her
 	if (USpringArmComponent* Boom = Hero->GetCameraBoom())
 	{
 		SavedArmLength = Boom->TargetArmLength;
-		Boom->TargetArmLength = SavedArmLength * 0.6f;
+		Boom->TargetArmLength = SavedArmLength * CameraArmLengthMultiplier;
 	}
 
 	if (UCameraComponent* Camera = Hero->GetFollowCamera())
 	{
 		SavedFOV = Camera->FieldOfView;
-		Camera->SetFieldOfView(SavedFOV * 0.85f);
+		Camera->SetFieldOfView(SavedFOV * CameraFOVMultiplier);
 	}
 
 	bCameraEffectActive = true;
 	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] BEGIN — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f"),
-		SavedArmLength, SavedArmLength * 0.6f, SavedFOV, SavedFOV * 0.85f);
+		SavedArmLength, SavedArmLength * CameraArmLengthMultiplier, SavedFOV, SavedFOV * CameraFOVMultiplier);
 }
 
 void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)

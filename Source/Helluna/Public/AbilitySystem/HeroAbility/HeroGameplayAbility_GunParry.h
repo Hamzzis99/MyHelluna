@@ -54,44 +54,62 @@ protected:
 
 	/** 패링 감지 범위 (cm) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Detection",
-		meta = (DisplayName = "감지 범위", ClampMin = "100.0", ClampMax = "1000.0"))
+		meta = (DisplayName = "감지 범위", ClampMin = "100.0", ClampMax = "1000.0",
+			ToolTip = "패링 가능한 적을 탐지하는 최대 거리 (cm). 이 범위 밖의 적은 패링 대상이 아님."))
 	float ParryDetectionRange = 300.f;
 
 	/** 전방 반각 (도) — 이 각도 안에 있는 적만 패링 대상 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Detection",
-		meta = (DisplayName = "전방 반각(도)", ClampMin = "10.0", ClampMax = "180.0"))
+		meta = (DisplayName = "전방 반각(도)", ClampMin = "10.0", ClampMax = "180.0",
+			ToolTip = "플레이어 정면 기준 좌우 감지 각도. 60이면 정면 120도 범위. 180이면 전방위."))
 	float ParryDetectionHalfAngle = 60.f;
 
 	/** Motion Warping 타겟 이름 */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution")
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
+		meta = (ToolTip = "MotionWarping에서 사용하는 타겟 이름. 몽타주의 MotionWarping Notify와 일치해야 함."))
 	FName WarpTargetName = TEXT("ParryTarget");
 
 	/** 처형 시 플레이어-몬스터 거리 (cm) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
-		meta = (DisplayName = "처형 거리", ClampMin = "50.0", ClampMax = "300.0"))
+		meta = (DisplayName = "처형 거리", ClampMin = "50.0", ClampMax = "300.0",
+			ToolTip = "워프 후 플레이어와 적 사이의 거리 (cm). 값이 작을수록 적에게 더 가까이 붙음."))
 	float ExecutionDistance = 100.f;
 
-	/** 워프 위치를 적 기준 어디로 할지 (0=정면, 90=옆, 180=뒤)
-	 *  BP에서 무기별로 다르게 세팅 가능 */
+	/** 워프 위치를 적 기준 어디로 할지 (0=정면, 90=옆, 180=뒤) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
 		meta = (DisplayName = "워프 각도 오프셋(도)", ClampMin = "0.0", ClampMax = "360.0",
-			ToolTip = "0=적 정면, 90=적 옆, 180=적 뒤. 권총은 180(뒤통수), 샷건은 0(정면) 등"))
+			ToolTip = "적 기준 워프 방향. 0=적 정면(샷건), 90=적 옆, 180=적 뒤(권총 뒤통수 사격). 무기별로 다르게 세팅."))
 	float WarpAngleOffset = 180.f;
 
 	/** 워프 후 플레이어가 적을 바라보도록 회전할지 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
-		meta = (DisplayName = "워프 후 적 방향 회전"))
+		meta = (DisplayName = "워프 후 적 방향 회전",
+			ToolTip = "true면 워프 후 자동으로 적을 바라봄. false면 워프 시 방향 그대로 유지."))
 	bool bFaceEnemyAfterWarp = true;
 
 	/** 처형 후 넉백 강도 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|PostExecution",
-		meta = (DisplayName = "넉백 강도", ClampMin = "0.0", ClampMax = "2000.0"))
+		meta = (DisplayName = "넉백 강도", ClampMin = "0.0", ClampMax = "2000.0",
+			ToolTip = "처형 완료 후 적을 밀어내는 힘. 0이면 넉백 없음. 사망 연출용."))
 	float PostParryKnockbackStrength = 600.f;
 
 	/** 사후 무적 시간 (초) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|PostExecution",
-		meta = (DisplayName = "사후 무적 시간(초)", ClampMin = "0.0", ClampMax = "5.0"))
+		meta = (DisplayName = "사후 무적 시간(초)", ClampMin = "0.0", ClampMax = "5.0",
+			ToolTip = "처형 완료 후 플레이어가 무적 상태로 유지되는 시간 (초). 처형 후 안전하게 빠져나올 여유."))
 	float PostParryInvincibleDuration = 1.0f;
+
+	/** 카메라 줌인 — 스프링암 길이 배율 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
+		meta = (DisplayName = "카메라 암 배율", ClampMin = "0.1", ClampMax = "1.0",
+			ToolTip = "처형 중 스프링암 길이를 원래 값의 몇 배로 줄일지. 0.6이면 40% 줌인. 값이 작을수록 캐릭터에 더 가까워짐."))
+	float CameraArmLengthMultiplier = 0.6f;
+
+	/** 카메라 줌인 — FOV 배율 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
+		meta = (DisplayName = "카메라 FOV 배율", ClampMin = "0.5", ClampMax = "1.0",
+			ToolTip = "처형 중 FOV를 원래 값의 몇 배로 줄일지. 0.85면 15% 좁아짐. 값이 작을수록 더 좁고 집중적인 화면."))
+	float CameraFOVMultiplier = 0.85f;
 
 	// ═══════════════════════════════════════════════════════════
 	// GAS 오버라이드
