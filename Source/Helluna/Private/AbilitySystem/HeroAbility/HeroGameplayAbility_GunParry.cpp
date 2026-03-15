@@ -21,6 +21,7 @@
 #include "Engine/OverlapResult.h"
 #include "GameMode/HellunaDefenseGameMode.h"
 #include "Character/EnemyComponent/HellunaHealthComponent.h"
+#include "UObject/UnrealType.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGunParry, Log, All);
 
@@ -161,6 +162,8 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		(int32)ActivationInfo.ActivationMode);
 
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+
+	bHandleExecutionFinishedCalled = false;
 
 	AHellunaHeroCharacter* Hero = GetHeroCharacterFromActorInfo();
 	if (!Hero)
@@ -312,6 +315,20 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		}
 	}
 
+	// [Fix: bug-005] ABP PlayFullBody=true → 전신 몽타주 재생
+	if (UAnimInstance* AnimInst = Hero->GetMesh()->GetAnimInstance())
+	{
+		FProperty* Prop = AnimInst->GetClass()->FindPropertyByName(TEXT("PlayFullBody"));
+		if (Prop)
+		{
+			if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+			{
+				BoolProp->SetPropertyValue_InContainer(AnimInst, true);
+				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] PlayFullBody = true"));
+			}
+		}
+	}
+
 	ExecutionMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this, NAME_None, ExecutionMontage, 1.f);
 
@@ -408,6 +425,8 @@ void UHeroGameplayAbility_GunParry::OnExecutionMontageInterrupted()
 
 void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 {
+	bHandleExecutionFinishedCalled = true;
+
 	AHellunaHeroCharacter* Hero = GetHeroCharacterFromActorInfo();
 	AHellunaEnemyCharacter* Enemy = ParryTarget;
 	const bool bIsServer = Hero && Hero->HasAuthority();
@@ -530,6 +549,20 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 	// ═══════════════════════════════════════════════════════════
 	if (Hero)
 	{
+		// [Fix: bug-005] ABP PlayFullBody 원복
+		if (UAnimInstance* AnimInst = Hero->GetMesh()->GetAnimInstance())
+		{
+			FProperty* Prop = AnimInst->GetClass()->FindPropertyByName(TEXT("PlayFullBody"));
+			if (Prop)
+			{
+				if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+				{
+					BoolProp->SetPropertyValue_InContainer(AnimInst, false);
+					UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] PlayFullBody = false"));
+				}
+			}
+		}
+
 		Hero->UnlockMoveInput();
 		Hero->UnlockLookInput();
 		EndCameraEffect(Hero);
@@ -560,7 +593,20 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] Frame=%llu, bWasCancelled=%d"), GFrameCounter, bWasCancelled);
+	UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] Frame=%llu, bWasCancelled=%d, bHandleFinishedCalled=%s"),
+		GFrameCounter, bWasCancelled, bHandleExecutionFinishedCalled ? TEXT("Y") : TEXT("N"));
+
+	// [Fix: bug-006] CLIENT EndAbility가 SERVER로 리플리케이트되면
+	// SERVER의 MontageTask 콜백 없이 여기로 직행함.
+	// 서버이고 HandleExecutionFinished가 아직 미호출이면 여기서 실행.
+	if (ActorInfo && ActorInfo->AvatarActor.IsValid() && ActorInfo->AvatarActor->HasAuthority()
+		&& !bHandleExecutionFinishedCalled && !bWasCancelled)
+	{
+		UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] SERVER: HandleExecutionFinished 미호출 → 여기서 실행"));
+		HandleExecutionFinished(false);
+	}
+
+	bHandleExecutionFinishedCalled = false;
 	ExecutionMontageTask = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);

@@ -176,6 +176,9 @@ private:
 
 	FTimerHandle PostInvincibleTimerHandle;
 
+	/** HandleExecutionFinished가 이미 호출되었는지 (EndAbility에서 서버 킬 로직 보장용) */
+	bool bHandleExecutionFinishedCalled = false;
+
 	/** 카메라 연출 전 원래 값 저장 */
 	float SavedArmLength = 0.f;
 	float SavedFOV = 0.f;
