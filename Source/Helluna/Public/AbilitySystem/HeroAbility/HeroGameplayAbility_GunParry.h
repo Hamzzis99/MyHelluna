@@ -141,7 +141,7 @@ private:
 	// ═══════════════════════════════════════════════════════════
 
 	/** 범위+전방각+태그 기반 패링 대상 검색 (인스턴스 메서드) */
-	AHellunaEnemyCharacter* FindParryableEnemy(const AHellunaHeroCharacter* Hero) const;
+	AHellunaEnemyCharacter* FindParryableEnemy(const AHellunaHeroCharacter* Hero) const; 
 
 	/** 패링 가능한 적이 근처에 있는지 경량 체크 (static — TryParryInstead용) */
 	static AHellunaEnemyCharacter* FindParryableEnemyStatic(const AHellunaHeroCharacter* Hero);

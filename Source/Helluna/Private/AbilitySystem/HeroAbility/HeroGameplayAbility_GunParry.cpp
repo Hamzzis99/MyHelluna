@@ -68,20 +68,40 @@ bool UHeroGameplayAbility_GunParry::ShouldDeferDeath(const AActor* Enemy)
 
 bool UHeroGameplayAbility_GunParry::TryParryInstead(UHellunaAbilitySystemComponent* ASC, const AHeroWeapon_GunBase* Weapon)
 {
-	if (!ASC || !Weapon) return false;
-	if (Weapon->FireMode == EWeaponFireMode::FullAuto) return false;
-	if (!Weapon->bCanParry) return false;
+	if (!ASC || !Weapon)
+	{
+		UE_LOG(LogGunParry, Warning, TEXT("[TryParryInstead] ASC=%s, Weapon=%s → 스킵"),
+			ASC ? TEXT("Valid") : TEXT("nullptr"), Weapon ? TEXT("Valid") : TEXT("nullptr"));
+		return false;
+	}
+	if (Weapon->FireMode == EWeaponFireMode::FullAuto)
+	{
+		UE_LOG(LogGunParry, Verbose, TEXT("[TryParryInstead] FullAuto 무기 → 패링 불가"));
+		return false;
+	}
+	if (!Weapon->bCanParry)
+	{
+		UE_LOG(LogGunParry, Verbose, TEXT("[TryParryInstead] bCanParry=false → 스킵"));
+		return false;
+	}
 
 	const AHellunaHeroCharacter* Hero = Cast<AHellunaHeroCharacter>(ASC->GetAvatarActor());
-	if (!Hero) return false;
+	if (!Hero)
+	{
+		UE_LOG(LogGunParry, Warning, TEXT("[TryParryInstead] Hero 캐스트 실패"));
+		return false;
+	}
 
-	if (!FindParryableEnemyStatic(Hero))
+	AHellunaEnemyCharacter* Found = FindParryableEnemyStatic(Hero);
+	if (!Found)
 	{
 		UE_LOG(LogGunParry, Verbose, TEXT("[TryParryInstead] FindParryableEnemyStatic → nullptr, 패링 스킵"));
 		return false;
 	}
 
-	UE_LOG(LogGunParry, Warning, TEXT("[TryParryInstead] 패링 가능한 적 발견! TryActivateAbilityByTag 호출"));
+	UE_LOG(LogGunParry, Warning, TEXT("[TryParryInstead] Frame=%llu 패링 대상=%s, 거리=%.0f → TryActivateAbilityByTag"),
+		GFrameCounter, *Found->GetName(),
+		FVector::Dist(Hero->GetActorLocation(), Found->GetActorLocation()));
 	return ASC->TryActivateAbilityByTag(HellunaGameplayTags::Player_Ability_GunParry);
 }
 
@@ -135,7 +155,8 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 	const FGameplayEventData* TriggerEventData)
 {
 	UE_LOG(LogGunParry, Warning, TEXT("══════════════════════════════════════════"));
-	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 시작 — Authority=%s, ActivationMode=%d"),
+	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 시작 — Frame=%llu, Authority=%s, ActivationMode=%d"),
+		GFrameCounter,
 		(ActorInfo && ActorInfo->AvatarActor.IsValid() && ActorInfo->AvatarActor->HasAuthority()) ? TEXT("SERVER") : TEXT("CLIENT"),
 		(int32)ActivationInfo.ActivationMode);
 
@@ -224,6 +245,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 	// [Fix: bug-004-2] 즉시 워프 — MotionWarping Notify 없이 직접 위치 이동
 	if (Enemy)
 	{
+		const FVector HeroLocBefore = Hero->GetActorLocation();
 		const FVector EnemyForward = Enemy->GetActorForwardVector();
 		const FVector EnemyLocation = Enemy->GetActorLocation();
 		const FVector OffsetDir = EnemyForward.RotateAngleAxis(WarpAngleOffset, FVector::UpVector);
@@ -236,8 +258,12 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		}
 
 		Hero->SetActorLocationAndRotation(WarpLocation, WarpRotation);
-		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] %s: 즉시 워프 — Loc=%s, Rot=%s"),
-			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"), *WarpLocation.ToString(), *WarpRotation.ToString());
+		const float DistToEnemy = FVector::Dist(WarpLocation, EnemyLocation);
+		const float WarpDist = FVector::Dist(HeroLocBefore, WarpLocation);
+		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] %s: 워프 — 이동전=%s → 이동후=%s (워프거리=%.0f, 적까지=%.0f, 각도오프셋=%.0f)"),
+			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"),
+			*HeroLocBefore.ToString(), *WarpLocation.ToString(),
+			WarpDist, DistToEnemy, WarpAngleOffset);
 	}
 	else
 	{
@@ -250,6 +276,20 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] %s: ExecutionMontage=%s"),
 		bIsServer ? TEXT("SERVER") : TEXT("CLIENT"),
 		ExecutionMontage ? *ExecutionMontage->GetName() : TEXT("NULL"));
+
+	if (ExecutionMontage)
+	{
+		USkeleton* MontageSkel = ExecutionMontage->GetSkeleton();
+		USkeleton* CharSkel = Hero->GetMesh() && Hero->GetMesh()->GetSkeletalMeshAsset() 
+			? Hero->GetMesh()->GetSkeletalMeshAsset()->GetSkeleton() : nullptr;
+		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] MontageSkel=%s, CharSkel=%s, Match=%s"),
+			MontageSkel ? *MontageSkel->GetName() : TEXT("NULL"),
+			CharSkel ? *CharSkel->GetName() : TEXT("NULL"),
+			(MontageSkel == CharSkel) ? TEXT("YES") : TEXT("NO"));
+		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] MontageGroup=%s, Length=%.2f"),
+			*ExecutionMontage->GetGroupName().ToString(),
+			ExecutionMontage->GetPlayLength());
+	}
 
 	if (!ExecutionMontage)
 	{
@@ -285,7 +325,20 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		ExecutionMontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnExecutionMontageInterrupted);
 		ExecutionMontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnExecutionMontageInterrupted);
 		ExecutionMontageTask->ReadyForActivation();
-		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] MontageTask ReadyForActivation 완료"));
+		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] MontageTask ReadyForActivation 완료 — Frame=%llu"), GFrameCounter);
+
+		// 비파괴 검증: 몽타주 실제 재생 상태 확인
+		if (UAnimInstance* VerifyAnim = Hero->GetMesh()->GetAnimInstance())
+		{
+			UAnimMontage* ActiveMontage = VerifyAnim->GetCurrentActiveMontage();
+			const bool bIsPlaying = VerifyAnim->Montage_IsPlaying(ExecutionMontage);
+			const float MontagePos = VerifyAnim->Montage_GetPosition(ExecutionMontage);
+			const float PlayRate = VerifyAnim->Montage_GetPlayRate(ExecutionMontage);
+			UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 몽타주 검증: ActiveMontage=%s, IsPlaying=%s, Position=%.3f, PlayRate=%.2f"),
+				ActiveMontage ? *ActiveMontage->GetName() : TEXT("없음"),
+				bIsPlaying ? TEXT("YES") : TEXT("NO"),
+				MontagePos, PlayRate);
+		}
 	}
 	else
 	{
@@ -310,13 +363,42 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 
 void UHeroGameplayAbility_GunParry::OnExecutionMontageCompleted()
 {
-	UE_LOG(LogGunParry, Warning, TEXT("[MontageCallback] OnCompleted 호출"));
+	const AHellunaHeroCharacter* Hero = GetHeroCharacterFromActorInfo();
+	const bool bIsServer = Hero && Hero->HasAuthority();
+
+	float MontagePos = 0.f;
+	if (Hero)
+	{
+		if (UAnimInstance* AnimInst = Hero->GetMesh()->GetAnimInstance())
+		{
+			MontagePos = AnimInst->Montage_GetPosition(AnimInst->GetCurrentActiveMontage());
+		}
+	}
+
+	UE_LOG(LogGunParry, Warning, TEXT("[MontageCallback] OnCompleted — %s, Frame=%llu, MontagePos=%.3f"),
+		bIsServer ? TEXT("SERVER") : TEXT("CLIENT"), GFrameCounter, MontagePos);
 	HandleExecutionFinished(false);
 }
 
 void UHeroGameplayAbility_GunParry::OnExecutionMontageInterrupted()
 {
-	UE_LOG(LogGunParry, Warning, TEXT("[MontageCallback] OnInterrupted 호출"));
+	const AHellunaHeroCharacter* Hero = GetHeroCharacterFromActorInfo();
+	const bool bIsServer = Hero && Hero->HasAuthority();
+
+	FString ActiveMontageName = TEXT("없음");
+	float MontagePos = 0.f;
+	if (Hero)
+	{
+		if (UAnimInstance* AnimInst = Hero->GetMesh()->GetAnimInstance())
+		{
+			UAnimMontage* Active = AnimInst->GetCurrentActiveMontage();
+			if (Active) ActiveMontageName = Active->GetName();
+			MontagePos = AnimInst->Montage_GetPosition(Active);
+		}
+	}
+
+	UE_LOG(LogGunParry, Warning, TEXT("[MontageCallback] OnInterrupted — %s, Frame=%llu, ActiveMontage=%s, Pos=%.3f"),
+		bIsServer ? TEXT("SERVER") : TEXT("CLIENT"), GFrameCounter, *ActiveMontageName, MontagePos);
 	HandleExecutionFinished(true);
 }
 
@@ -331,10 +413,40 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 	const bool bIsServer = Hero && Hero->HasAuthority();
 
 	UE_LOG(LogGunParry, Warning, TEXT("══════════════════════════════════════════"));
-	UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s — bCancelled=%d, Hero=%s, Enemy=%s"),
-		bIsServer ? TEXT("SERVER") : TEXT("CLIENT"), bWasCancelled,
+	UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s — Frame=%llu, bCancelled=%d, Hero=%s, Enemy=%s"),
+		bIsServer ? TEXT("SERVER") : TEXT("CLIENT"), GFrameCounter, bWasCancelled,
 		Hero ? *Hero->GetName() : TEXT("nullptr"),
 		Enemy ? *Enemy->GetName() : TEXT("nullptr"));
+
+	// 진입 시 상태 스냅샷
+	if (Enemy)
+	{
+		float EnemyHP = -1.f;
+		if (UHellunaHealthComponent* HC = Enemy->FindComponentByClass<UHellunaHealthComponent>())
+			EnemyHP = HC->GetHealth();
+
+		const bool bAnimLocked = UHellunaFunctionLibrary::NativeDoesActorHaveTag(Enemy, HellunaGameplayTags::Enemy_State_AnimLocked);
+		const bool bParryable = UHellunaFunctionLibrary::NativeDoesActorHaveTag(Enemy, HellunaGameplayTags::Enemy_Ability_Parryable);
+		const float DistToHero = Hero ? FVector::Dist(Hero->GetActorLocation(), Enemy->GetActorLocation()) : -1.f;
+
+		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Enemy 상태: HP=%.1f, AnimLocked=%s, Parryable=%s, 거리=%.0f, bCanBeParried=%s, bEnraged=%s"),
+			EnemyHP,
+			bAnimLocked ? TEXT("Y") : TEXT("N"),
+			bParryable ? TEXT("Y") : TEXT("N"),
+			DistToHero,
+			Enemy->bCanBeParried ? TEXT("Y") : TEXT("N"),
+			Enemy->bEnraged ? TEXT("Y") : TEXT("N"));
+	}
+	if (Hero)
+	{
+		const bool bInvincible = UHellunaFunctionLibrary::NativeDoesActorHaveTag(Hero, HellunaGameplayTags::Player_State_Invincible);
+		const bool bExecution = UHellunaFunctionLibrary::NativeDoesActorHaveTag(Hero, HellunaGameplayTags::Player_State_ParryExecution);
+		const bool bPostInvincible = UHellunaFunctionLibrary::NativeDoesActorHaveTag(Hero, HellunaGameplayTags::Player_State_PostParryInvincible);
+		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Hero 태그: Invincible=%s, ParryExecution=%s, PostParryInvincible=%s"),
+			bInvincible ? TEXT("Y") : TEXT("N"),
+			bExecution ? TEXT("Y") : TEXT("N"),
+			bPostInvincible ? TEXT("Y") : TEXT("N"));
+	}
 
 	// ═══════════════════════════════════════════════════════════
 	// 서버 전용: 적 사망 + 태그 정리 + 넉백
@@ -448,7 +560,7 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] bWasCancelled=%d"), bWasCancelled);
+	UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] Frame=%llu, bWasCancelled=%d"), GFrameCounter, bWasCancelled);
 	ExecutionMontageTask = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
@@ -489,7 +601,9 @@ AHellunaEnemyCharacter* UHeroGameplayAbility_GunParry::FindParryableEnemy(const 
 		return nullptr;
 	}
 
-	UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] Overlap 결과: %d개"), Overlaps.Num());
+	UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] Frame=%llu, Hero=%s, Loc=%s, Forward=%s, Range=%.0f, HalfAngle=%.0f, Overlaps=%d"),
+		GFrameCounter, *Hero->GetName(), *HeroLocation.ToString(), *HeroForward.ToString(),
+		ParryDetectionRange, ParryDetectionHalfAngle, Overlaps.Num());
 
 	for (const FOverlapResult& Overlap : Overlaps)
 	{
@@ -527,6 +641,8 @@ AHellunaEnemyCharacter* UHeroGameplayAbility_GunParry::FindParryableEnemy(const 
 		}
 
 		const float DistSq = FVector::DistSquared(HeroLocation, Enemy->GetActorLocation());
+		UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] %s: 조건 통과 — Dot=%.2f, 거리=%.0f"),
+			*Enemy->GetName(), DotResult, FMath::Sqrt(DistSq));
 		if (DistSq < BestDistSq)
 		{
 			BestDistSq = DistSq;
@@ -534,6 +650,9 @@ AHellunaEnemyCharacter* UHeroGameplayAbility_GunParry::FindParryableEnemy(const 
 		}
 	}
 
+	UE_LOG(LogGunParry, Warning, TEXT("[FindParryableEnemy] 결과: %s (거리=%.0f)"),
+		BestEnemy ? *BestEnemy->GetName() : TEXT("nullptr"),
+		BestEnemy ? FMath::Sqrt(BestDistSq) : 0.f);
 	return BestEnemy;
 }
 
