@@ -35,7 +35,7 @@ public:
 
 	/** 패링 윈도우 지속 시간 (초) */
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Parry",
-		meta = (DisplayName = "패링 윈도우 시간(초)", ClampMin = "0.1", ClampMax = "1.0",
+		meta = (DisplayName = "패링 윈도우 시간(초)", ClampMin = "0.1", ClampMax = "100.0",
 			EditCondition = "bOpensParryWindow"))
 	float ParryWindowDuration = 0.4f;
 
