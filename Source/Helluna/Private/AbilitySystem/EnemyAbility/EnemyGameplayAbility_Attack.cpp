@@ -42,6 +42,11 @@ void UEnemyGameplayAbility_Attack::ActivateAbility(
 	// 건패링 윈도우 열기 (bOpensParryWindow + bCanBeParried 체크는 내부에서 처리)
 	TryOpenParryWindow();
 
+	// TODO [Step 12] 패링 힌트 이펙트
+	// 패링 윈도우가 열릴 때 Niagara 이펙트 스폰
+	// 게임 옵션에서 On/Off 토글 가능하게
+	// Enemy->Multicast_PlayParryHintVFX() 같은 함수로 처리 예정
+
 	UAnimMontage* AttackMontage = Enemy->AttackMontage;
 	if (!AttackMontage)
 	{
