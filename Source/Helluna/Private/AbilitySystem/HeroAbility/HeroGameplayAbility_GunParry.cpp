@@ -784,6 +784,27 @@ AHellunaEnemyCharacter* UHeroGameplayAbility_GunParry::FindParryableEnemyStatic(
 void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Hero)
 {
 	if (!Hero || !Hero->IsLocallyControlled()) return;
+
+	// 이전 복귀 보간이 진행 중이면 즉시 스냅하고 타이머 해제
+	if (CameraReturnTimerHandle.IsValid())
+	{
+		if (UWorld* World = Hero->GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(*CameraReturnTimerHandle);
+		}
+		CameraReturnTimerHandle.Reset();
+
+		// 아직 목표값에 도달하지 못했을 수 있으므로 즉시 스냅
+		if (USpringArmComponent* Boom = Hero->GetCameraBoom())
+		{
+			Boom->TargetArmLength = SavedArmLength;
+			if (!CameraTargetOffset.IsZero())
+				Boom->SocketOffset = SavedSocketOffset;
+		}
+		if (UCameraComponent* Camera = Hero->GetFollowCamera())
+			Camera->SetFieldOfView(SavedFOV);
+	}
+
 	if (bCameraEffectActive) return;
 
 	if (USpringArmComponent* Boom = Hero->GetCameraBoom())
@@ -816,21 +837,98 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	if (!Hero || !Hero->IsLocallyControlled()) return;
 	if (!bCameraEffectActive) return;
 
-	if (USpringArmComponent* Boom = Hero->GetCameraBoom())
-	{
-		Boom->TargetArmLength = SavedArmLength;
-
-		if (!CameraTargetOffset.IsZero())
-		{
-			Boom->SocketOffset = SavedSocketOffset;
-		}
-	}
-
-	if (UCameraComponent* Camera = Hero->GetFollowCamera())
-	{
-		Camera->SetFieldOfView(SavedFOV);
-	}
-
 	bCameraEffectActive = false;
-	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] END — ArmLength→%.0f, FOV→%.0f, SocketOffset 원복"), SavedArmLength, SavedFOV);
+
+	UWorld* World = Hero->GetWorld();
+	if (!World)
+	{
+		// 월드 없으면 즉시 스냅 폴백
+		if (USpringArmComponent* Boom = Hero->GetCameraBoom())
+		{
+			Boom->TargetArmLength = SavedArmLength;
+			if (!CameraTargetOffset.IsZero()) Boom->SocketOffset = SavedSocketOffset;
+		}
+		if (UCameraComponent* Camera = Hero->GetFollowCamera())
+			Camera->SetFieldOfView(SavedFOV);
+		return;
+	}
+
+	// GA GC 후에도 안전하게 동작하도록 WeakPtr + 값 캡처
+	TWeakObjectPtr<USpringArmComponent> WeakBoom = Hero->GetCameraBoom();
+	TWeakObjectPtr<UCameraComponent> WeakCamera = Hero->GetFollowCamera();
+	TWeakObjectPtr<UWorld> WeakWorld = World;
+
+	const float TargetArmLength = SavedArmLength;
+	const float TargetFOV = SavedFOV;
+	const FVector TargetSocketOffset = SavedSocketOffset;
+	const float InterpSpeed = CameraReturnSpeed;
+	const bool bHasOffset = !CameraTargetOffset.IsZero();
+
+	// TSharedPtr로 람다 내부에서 self-clear 가능
+	TSharedPtr<FTimerHandle> TimerHandle = MakeShared<FTimerHandle>();
+	CameraReturnTimerHandle = TimerHandle;
+
+	constexpr float TickRate = 0.016f;
+
+	auto InterpLambda = [WeakBoom, WeakCamera, WeakWorld, TimerHandle,
+		TargetArmLength, TargetFOV, TargetSocketOffset, InterpSpeed, bHasOffset, TickRate]()
+	{
+		// 컴포넌트 모두 소멸 → 타이머 해제
+		if (!WeakBoom.IsValid() && !WeakCamera.IsValid())
+		{
+			if (WeakWorld.IsValid() && TimerHandle.IsValid())
+				WeakWorld->GetTimerManager().ClearTimer(*TimerHandle);
+			return;
+		}
+
+		bool bDone = true;
+
+		if (WeakBoom.IsValid())
+		{
+			WeakBoom->TargetArmLength = FMath::FInterpTo(
+				WeakBoom->TargetArmLength, TargetArmLength, TickRate, InterpSpeed);
+			if (!FMath::IsNearlyEqual(WeakBoom->TargetArmLength, TargetArmLength, 0.5f))
+				bDone = false;
+
+			if (bHasOffset)
+			{
+				WeakBoom->SocketOffset = FMath::VInterpTo(
+					WeakBoom->SocketOffset, TargetSocketOffset, TickRate, InterpSpeed);
+				if (!WeakBoom->SocketOffset.Equals(TargetSocketOffset, 0.5f))
+					bDone = false;
+			}
+		}
+
+		if (WeakCamera.IsValid())
+		{
+			const float NewFOV = FMath::FInterpTo(
+				WeakCamera->FieldOfView, TargetFOV, TickRate, InterpSpeed);
+			WeakCamera->SetFieldOfView(NewFOV);
+			if (!FMath::IsNearlyEqual(NewFOV, TargetFOV, 0.1f))
+				bDone = false;
+		}
+
+		if (bDone)
+		{
+			// 정확한 값으로 스냅
+			if (WeakBoom.IsValid())
+			{
+				WeakBoom->TargetArmLength = TargetArmLength;
+				if (bHasOffset) WeakBoom->SocketOffset = TargetSocketOffset;
+			}
+			if (WeakCamera.IsValid())
+				WeakCamera->SetFieldOfView(TargetFOV);
+
+			if (WeakWorld.IsValid() && TimerHandle.IsValid())
+				WeakWorld->GetTimerManager().ClearTimer(*TimerHandle);
+		}
+	};
+
+	World->GetTimerManager().SetTimer(
+		*TimerHandle,
+		FTimerDelegate::CreateLambda(InterpLambda),
+		TickRate, true, CameraReturnDelay);
+
+	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] END — smooth return (Speed=%.1f, Delay=%.2fs, TargetArm=%.0f, TargetFOV=%.0f)"),
+		CameraReturnSpeed, CameraReturnDelay, TargetArmLength, TargetFOV);
 }

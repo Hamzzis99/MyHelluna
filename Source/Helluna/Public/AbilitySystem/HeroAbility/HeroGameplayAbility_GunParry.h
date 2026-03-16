@@ -129,6 +129,18 @@ protected:
 			ToolTip = "처형 중 카메라가 바라보는 지점의 오프셋. X=전후, Y=좌우, Z=상하. (0,0,50)이면 캐릭터 머리 위를 바라봄."))
 	FVector CameraTargetOffset = FVector::ZeroVector;
 
+	/** 카메라 복귀 보간 속도 — FInterpTo의 InterpSpeed. 클수록 빨리 돌아감 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
+		meta = (DisplayName = "카메라 복귀 속도", ClampMin = "0.5", ClampMax = "20.0",
+			ToolTip = "처형 종료 후 카메라가 원래 위치로 돌아가는 속도. 1=~1.5초(느림), 3=~0.5초(RE느낌), 5=~0.3초(빠름)."))
+	float CameraReturnSpeed = 3.0f;
+
+	/** 카메라 복귀 시작 전 대기 시간 (초) */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
+		meta = (DisplayName = "카메라 복귀 딜레이(초)", ClampMin = "0.0", ClampMax = "2.0",
+			ToolTip = "처형 종료 후 카메라 복귀가 시작되기까지의 대기 시간. 0이면 즉시 복귀 시작."))
+	float CameraReturnDelay = 0.0f;
+
 	// ═══════════════════════════════════════════════════════════
 	// GAS 오버라이드
 	// ═══════════════════════════════════════════════════════════
@@ -202,4 +214,7 @@ private:
 	float SavedFOV = 0.f;
 	FVector SavedSocketOffset = FVector::ZeroVector;
 	bool bCameraEffectActive = false;
+
+	/** 카메라 복귀 보간 타이머 — GA GC 후에도 안전하게 동작하도록 TSharedPtr */
+	TSharedPtr<FTimerHandle> CameraReturnTimerHandle;
 };
