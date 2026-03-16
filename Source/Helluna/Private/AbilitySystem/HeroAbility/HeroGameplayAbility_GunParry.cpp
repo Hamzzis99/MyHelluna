@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "MotionWarpingComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -267,6 +268,21 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		}
 
 		Hero->SetActorLocationAndRotation(WarpLocation, WarpRotation);
+
+		// [Fix: collision] 처형 중 캐릭터 충돌 비활성화 — 적과 겹침 방지
+		if (UCapsuleComponent* Capsule = Hero->GetCapsuleComponent())
+		{
+			Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+
+		// [Fix: camera-warp-tuning] 카메라(Controller)도 워프 방향으로 회전 — 캐릭터가 카메라 시야에 보이도록
+		if (Hero->IsLocallyControlled())
+		{
+			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+			{
+				PC->SetControlRotation(WarpRotation);
+			}
+		}
 		const float DistToEnemy = FVector::Dist(WarpLocation, EnemyLocation);
 		const float WarpDist = FVector::Dist(HeroLocBefore, WarpLocation);
 		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] %s: 워프 — 이동전=%s → 이동후=%s (워프거리=%.0f, 적까지=%.0f, 각도오프셋=%.0f)"),
@@ -548,6 +564,12 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		// [Fix: bug-005] Hero.PlayFullBody 원복
 		Hero->PlayFullBody = false;
 		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Hero.PlayFullBody = false"));
+
+		// [Fix: collision] 처형 종료 — 충돌 복원
+		if (UCapsuleComponent* Capsule = Hero->GetCapsuleComponent())
+		{
+			Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		}
 
 		Hero->UnlockMoveInput();
 		Hero->UnlockLookInput();
