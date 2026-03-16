@@ -95,18 +95,84 @@ public:
 	const FGunAnimationSet& GetAnimSet() const { return GunAnimSet; }
 
 	// ═══════════════════════════════════════════════════════════
-	// 건패링 관련
+	// 건패링 관련 — bCanParry=true일 때만 하위 옵션 표시
 	// ═══════════════════════════════════════════════════════════
 
-	/** 이 무기로 건패링이 가능한지 (핸드건, 샷건 등에서 true) */
+	/** 이 무기로 건패링이 가능한지 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
-		meta = (DisplayName = "건패링 가능"))
+		meta = (DisplayName = "건패링 가능",
+			ToolTip = "true면 이 무기로 건패링 가능. false면 아래 패링 옵션이 전부 숨겨짐."))
 	bool bCanParry = false;
 
-	/** 무기 타입별 처형 몽타주 (플레이어 측 - 무기마다 다른 연출) */
+	/** 무기 타입별 처형 몽타주 (플레이어 측) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
-		meta = (DisplayName = "패링 처형 몽타주 (플레이어)"))
+		meta = (DisplayName = "패링 처형 몽타주 (플레이어)",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "건패링 처형 시 플레이어가 재생할 몽타주. 무기마다 다른 연출."))
 	TObjectPtr<UAnimMontage> ParryExecutionMontage = nullptr;
+
+	/** 적 기준 워프 방향 (도) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "워프 각도 오프셋(도)", ClampMin = "0.0", ClampMax = "360.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "적 기준 워프 방향. 0=적 정면(샷건: 얼굴에 총 대기), 90=옆, 180=적 뒤(권총: 뒤통수 사격)."))
+	float WarpAngleOffset = 180.f;
+
+	/** 워프 후 적과의 거리 (cm) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "처형 거리", ClampMin = "30.0", ClampMax = "300.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "워프 후 적과의 거리(cm). 권총=100, 샷건=60(밀착) 추천."))
+	float ExecutionDistance = 100.f;
+
+	/** 워프 후 적 방향 회전 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "워프 후 적 방향 회전",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "true면 워프 후 캐릭터가 적을 바라보도록 회전."))
+	bool bFaceEnemyAfterWarp = true;
+
+	/** 처형 중 스프링암 길이 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Camera",
+		meta = (DisplayName = "카메라 암 배율", ClampMin = "0.1", ClampMax = "1.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 중 스프링암 길이 배율. 0.35면 65% 줌인. 권총=0.35, 샷건=0.2 추천."))
+	float CameraArmLengthMultiplier = 0.6f;
+
+	/** 처형 중 FOV 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Camera",
+		meta = (DisplayName = "카메라 FOV 배율", ClampMin = "0.3", ClampMax = "1.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 중 FOV 배율. 0.7이면 30% 좁아짐. 권총=0.7, 샷건=0.5 추천."))
+	float CameraFOVMultiplier = 0.85f;
+
+	/** 처형 중 카메라 Yaw 오프셋 (도) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Camera",
+		meta = (DisplayName = "카메라 Yaw 오프셋(도)", ClampMin = "-180.0", ClampMax = "180.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 중 카메라 Yaw 오프셋. 정면(180도) 기준 추가 회전. 권총=30(RE9 옆), 샷건=0(정면 클로즈업) 추천."))
+	float CameraExecutionYawOffset = 0.0f;
+
+	/** 처형 중 카메라 위치 오프셋 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Camera",
+		meta = (DisplayName = "카메라 타겟 오프셋",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 중 카메라 위치 오프셋(SpringArm SocketOffset에 더함). X=전후, Y=좌우, Z=상하."))
+	FVector CameraTargetOffset = FVector::ZeroVector;
+
+	/** 카메라 복귀 보간 속도 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Camera",
+		meta = (DisplayName = "카메라 복귀 속도", ClampMin = "0.5", ClampMax = "20.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 후 카메라 복귀 속도(InterpSpeed). 3=~0.5초(RE느낌), 5=~0.3초(빠름). 샷건=5.0 추천."))
+	float CameraReturnSpeed = 3.0f;
+
+	/** 카메라 복귀 시작 전 대기 시간 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Camera",
+		meta = (DisplayName = "카메라 복귀 딜레이(초)", ClampMin = "0.0", ClampMax = "2.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 후 카메라 복귀 시작까지 대기(초). 권총=0.3, 샷건=0.1 추천."))
+	float CameraReturnDelay = 0.0f;
 
 
 protected:

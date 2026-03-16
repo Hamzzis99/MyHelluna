@@ -253,14 +253,33 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		}
 	}
 
+	// ═══════════════════════════════════════════════════════════
+	// 무기에서 카메라/워프 설정 캐싱
+	// ═══════════════════════════════════════════════════════════
+	if (Weapon)
+	{
+		CachedWarpAngleOffset = Weapon->WarpAngleOffset;
+		CachedExecutionDistance = Weapon->ExecutionDistance;
+		bCachedFaceEnemyAfterWarp = Weapon->bFaceEnemyAfterWarp;
+		CachedArmLengthMul = Weapon->CameraArmLengthMultiplier;
+		CachedFOVMul = Weapon->CameraFOVMultiplier;
+		CachedYawOffset = Weapon->CameraExecutionYawOffset;
+		CachedCameraTargetOffset = Weapon->CameraTargetOffset;
+		CachedReturnSpeed = Weapon->CameraReturnSpeed;
+		CachedReturnDelay = Weapon->CameraReturnDelay;
+
+		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 무기 카메라 설정: Weapon=%s, ArmMul=%.2f, FOVMul=%.2f, YawOffset=%.1f, WarpAngle=%.1f, ExecDist=%.0f"),
+			*Weapon->GetName(), CachedArmLengthMul, CachedFOVMul, CachedYawOffset, CachedWarpAngleOffset, CachedExecutionDistance);
+	}
+
 	// [Fix: bug-004-2] 즉시 워프 — MotionWarping Notify 없이 직접 위치 이동
 	if (Enemy)
 	{
 		const FVector HeroLocBefore = Hero->GetActorLocation();
 		const FVector EnemyForward = Enemy->GetActorForwardVector();
 		const FVector EnemyLocation = Enemy->GetActorLocation();
-		const FVector OffsetDir = EnemyForward.RotateAngleAxis(WarpAngleOffset, FVector::UpVector);
-		FVector WarpLocation = EnemyLocation + OffsetDir * ExecutionDistance;
+		const FVector OffsetDir = EnemyForward.RotateAngleAxis(CachedWarpAngleOffset, FVector::UpVector);
+		FVector WarpLocation = EnemyLocation + OffsetDir * CachedExecutionDistance;
 
 		// [Fix: camera-warp-tuning] Z축 처리
 		if (bKeepHeroZOnWarp)
@@ -270,7 +289,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		WarpLocation.Z += WarpZOffset;
 
 		FRotator WarpRotation = Hero->GetActorRotation();
-		if (bFaceEnemyAfterWarp)
+		if (bCachedFaceEnemyAfterWarp)
 		{
 			WarpRotation = (EnemyLocation - WarpLocation).Rotation();
 		}
@@ -283,12 +302,24 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
 
-		// [Fix: camera-warp-tuning] 카메라(Controller)도 워프 방향으로 회전 — 캐릭터가 카메라 시야에 보이도록
+		// 카메라 정면 배치 — bUseControllerRotationYaw 비활성화 + ControlRotation = WarpYaw + 180 + YawOffset
 		if (Hero->IsLocallyControlled())
 		{
+			// bUseControllerRotationYaw 저장 및 비활성화 (ActorRotation과 ControlRotation 분리)
+			bSavedUseControllerRotationYaw = Hero->bUseControllerRotationYaw;
+			Hero->bUseControllerRotationYaw = false;
+
 			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
 			{
-				PC->SetControlRotation(WarpRotation);
+				SavedControlRotationYaw = PC->GetControlRotation().Yaw;
+
+				// 카메라를 캐릭터 정면/옆에 배치: WarpYaw + 180(정면) + YawOffset(미세조정)
+				FRotator CameraRotation = WarpRotation;
+				CameraRotation.Yaw += 180.f + CachedYawOffset;
+
+				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 카메라 정면 배치: CharacterYaw=%.1f, CameraYaw=%.1f (WarpYaw+180+Offset=%.1f+180+%.1f)"),
+					WarpRotation.Yaw, CameraRotation.Yaw, WarpRotation.Yaw, CachedYawOffset);
+				PC->SetControlRotation(CameraRotation);
 			}
 		}
 		const float DistToEnemy = FVector::Dist(WarpLocation, EnemyLocation);
@@ -296,7 +327,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] %s: 워프 — 이동전=%s → 이동후=%s (워프거리=%.0f, 적까지=%.0f, 각도오프셋=%.0f)"),
 			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"),
 			*HeroLocBefore.ToString(), *WarpLocation.ToString(),
-			WarpDist, DistToEnemy, WarpAngleOffset);
+			WarpDist, DistToEnemy, CachedWarpAngleOffset);
 	}
 	else
 	{
@@ -580,9 +611,9 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		}
 
 		Hero->UnlockMoveInput();
-		Hero->UnlockLookInput();
+		// LookInput은 EndCameraEffect의 복귀 타이머 완료 시 해제 (ControlRotation InterpTo 중 충돌 방지)
 		EndCameraEffect(Hero);
-		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s: 잠금 해제 + 카메라 원복"),
+		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s: 이동 잠금 해제 + 카메라 복귀 시작 (시점 잠금은 복귀 완료 시 해제)"),
 			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 	}
 
@@ -788,6 +819,7 @@ void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Her
 	// 이전 복귀 보간이 진행 중이면 즉시 스냅하고 타이머 해제
 	if (CameraReturnTimerHandle.IsValid())
 	{
+		UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] 복귀 진행 중 새 패링 → 즉시 스냅"));
 		if (UWorld* World = Hero->GetWorld())
 		{
 			World->GetTimerManager().ClearTimer(*CameraReturnTimerHandle);
@@ -798,7 +830,7 @@ void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Her
 		if (USpringArmComponent* Boom = Hero->GetCameraBoom())
 		{
 			Boom->TargetArmLength = SavedArmLength;
-			if (!CameraTargetOffset.IsZero())
+			if (!CachedCameraTargetOffset.IsZero())
 				Boom->SocketOffset = SavedSocketOffset;
 		}
 		if (UCameraComponent* Camera = Hero->GetFollowCamera())
@@ -810,26 +842,26 @@ void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Her
 	if (USpringArmComponent* Boom = Hero->GetCameraBoom())
 	{
 		SavedArmLength = Boom->TargetArmLength;
-		Boom->TargetArmLength = SavedArmLength * CameraArmLengthMultiplier;
+		Boom->TargetArmLength = SavedArmLength * CachedArmLengthMul;
 
 		// CameraTargetOffset → SocketOffset에 더하기
-		if (!CameraTargetOffset.IsZero())
+		if (!CachedCameraTargetOffset.IsZero())
 		{
 			SavedSocketOffset = Boom->SocketOffset;
-			Boom->SocketOffset += CameraTargetOffset;
+			Boom->SocketOffset += CachedCameraTargetOffset;
 		}
 	}
 
 	if (UCameraComponent* Camera = Hero->GetFollowCamera())
 	{
 		SavedFOV = Camera->FieldOfView;
-		Camera->SetFieldOfView(SavedFOV * CameraFOVMultiplier);
+		Camera->SetFieldOfView(SavedFOV * CachedFOVMul);
 	}
 
 	bCameraEffectActive = true;
 	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] BEGIN — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f, SocketOffset=%s"),
-		SavedArmLength, SavedArmLength * CameraArmLengthMultiplier, SavedFOV, SavedFOV * CameraFOVMultiplier,
-		*CameraTargetOffset.ToString());
+		SavedArmLength, SavedArmLength * CachedArmLengthMul, SavedFOV, SavedFOV * CachedFOVMul,
+		*CachedCameraTargetOffset.ToString());
 }
 
 void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
@@ -846,10 +878,12 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 		if (USpringArmComponent* Boom = Hero->GetCameraBoom())
 		{
 			Boom->TargetArmLength = SavedArmLength;
-			if (!CameraTargetOffset.IsZero()) Boom->SocketOffset = SavedSocketOffset;
+			if (!CachedCameraTargetOffset.IsZero()) Boom->SocketOffset = SavedSocketOffset;
 		}
 		if (UCameraComponent* Camera = Hero->GetFollowCamera())
 			Camera->SetFieldOfView(SavedFOV);
+		Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+		Hero->UnlockLookInput();
 		return;
 	}
 
@@ -857,28 +891,53 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	TWeakObjectPtr<USpringArmComponent> WeakBoom = Hero->GetCameraBoom();
 	TWeakObjectPtr<UCameraComponent> WeakCamera = Hero->GetFollowCamera();
 	TWeakObjectPtr<UWorld> WeakWorld = World;
+	TWeakObjectPtr<APlayerController> WeakPC = Cast<APlayerController>(Hero->GetController());
+	TWeakObjectPtr<AHellunaHeroCharacter> WeakHero = Hero;
 
 	const float TargetArmLength = SavedArmLength;
 	const float TargetFOV = SavedFOV;
 	const FVector TargetSocketOffset = SavedSocketOffset;
-	const float InterpSpeed = CameraReturnSpeed;
-	const bool bHasOffset = !CameraTargetOffset.IsZero();
+	const float InterpSpeed = CachedReturnSpeed;
+	const bool bHasOffset = !CachedCameraTargetOffset.IsZero();
+
+	// ControlRotation 복귀 목표 = 캐릭터 뒤(= 캐릭터 정면 방향 Yaw)
+	const float TargetControlYaw = Hero->GetActorRotation().Yaw;
+	const bool bSavedUseCtrlYaw = bSavedUseControllerRotationYaw;
 
 	// TSharedPtr로 람다 내부에서 self-clear 가능
 	TSharedPtr<FTimerHandle> TimerHandle = MakeShared<FTimerHandle>();
 	CameraReturnTimerHandle = TimerHandle;
 
 	constexpr float TickRate = 0.016f;
+	TSharedPtr<int32> TickCount = MakeShared<int32>(0);
 
-	auto InterpLambda = [WeakBoom, WeakCamera, WeakWorld, TimerHandle,
-		TargetArmLength, TargetFOV, TargetSocketOffset, InterpSpeed, bHasOffset, TickRate]()
+	auto InterpLambda = [WeakBoom, WeakCamera, WeakWorld, WeakPC, WeakHero, TimerHandle, TickCount,
+		TargetArmLength, TargetFOV, TargetSocketOffset, TargetControlYaw,
+		InterpSpeed, bHasOffset, bSavedUseCtrlYaw, TickRate]()
 	{
-		// 컴포넌트 모두 소멸 → 타이머 해제
+		++(*TickCount);
+
+		// 컴포넌트 모두 소멸 → 타이머 해제 + 안전 복원
 		if (!WeakBoom.IsValid() && !WeakCamera.IsValid())
 		{
+			if (WeakHero.IsValid())
+			{
+				WeakHero->bUseControllerRotationYaw = bSavedUseCtrlYaw;
+				WeakHero->UnlockLookInput();
+			}
 			if (WeakWorld.IsValid() && TimerHandle.IsValid())
 				WeakWorld->GetTimerManager().ClearTimer(*TimerHandle);
 			return;
+		}
+
+		// 첫 틱: 시작 로그
+		if (*TickCount == 1)
+		{
+			const float CurArm = WeakBoom.IsValid() ? WeakBoom->TargetArmLength : 0.f;
+			const float CurFOV = WeakCamera.IsValid() ? WeakCamera->FieldOfView : 0.f;
+			const float CurYaw = WeakPC.IsValid() ? WeakPC->GetControlRotation().Yaw : 0.f;
+			UE_LOG(LogGunParry, Warning, TEXT("[CameraReturn] 시작 — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f, ControlYaw=%.1f→%.1f"),
+				CurArm, TargetArmLength, CurFOV, TargetFOV, CurYaw, TargetControlYaw);
 		}
 
 		bool bDone = true;
@@ -908,6 +967,19 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 				bDone = false;
 		}
 
+		// ControlRotation Yaw InterpTo (LookInput 잠금 중이므로 플레이어 입력과 충돌 없음)
+		if (WeakPC.IsValid())
+		{
+			FRotator CurCtrl = WeakPC->GetControlRotation();
+			const float NewYaw = FMath::FInterpTo(CurCtrl.Yaw, TargetControlYaw, TickRate, InterpSpeed);
+			if (!FMath::IsNearlyEqual(FMath::UnwindDegrees(NewYaw - TargetControlYaw), 0.f, 1.0f))
+			{
+				bDone = false;
+			}
+			CurCtrl.Yaw = NewYaw;
+			WeakPC->SetControlRotation(CurCtrl);
+		}
+
 		if (bDone)
 		{
 			// 정확한 값으로 스냅
@@ -918,6 +990,23 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 			}
 			if (WeakCamera.IsValid())
 				WeakCamera->SetFieldOfView(TargetFOV);
+			if (WeakPC.IsValid())
+			{
+				FRotator FinalCtrl = WeakPC->GetControlRotation();
+				FinalCtrl.Yaw = TargetControlYaw;
+				WeakPC->SetControlRotation(FinalCtrl);
+			}
+
+			// bUseControllerRotationYaw 복원 + LookInput 해제
+			if (WeakHero.IsValid())
+			{
+				WeakHero->bUseControllerRotationYaw = bSavedUseCtrlYaw;
+				WeakHero->UnlockLookInput();
+			}
+
+			const float FinalYaw = WeakPC.IsValid() ? WeakPC->GetControlRotation().Yaw : TargetControlYaw;
+			UE_LOG(LogGunParry, Warning, TEXT("[CameraReturn] 완료 — ArmLength=%.0f, FOV=%.0f, ControlYaw=%.1f (소요 프레임=%d)"),
+				TargetArmLength, TargetFOV, FinalYaw, *TickCount);
 
 			if (WeakWorld.IsValid() && TimerHandle.IsValid())
 				WeakWorld->GetTimerManager().ClearTimer(*TimerHandle);
@@ -927,8 +1016,8 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	World->GetTimerManager().SetTimer(
 		*TimerHandle,
 		FTimerDelegate::CreateLambda(InterpLambda),
-		TickRate, true, CameraReturnDelay);
+		TickRate, true, CachedReturnDelay);
 
-	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] END — smooth return (Speed=%.1f, Delay=%.2fs, TargetArm=%.0f, TargetFOV=%.0f)"),
-		CameraReturnSpeed, CameraReturnDelay, TargetArmLength, TargetFOV);
+	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] END — 부드러운 복귀 시작 (Speed=%.1f, Delay=%.1f)"),
+		CachedReturnSpeed, CachedReturnDelay);
 }

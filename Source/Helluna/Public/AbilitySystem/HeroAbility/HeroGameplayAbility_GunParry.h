@@ -69,77 +69,29 @@ protected:
 		meta = (ToolTip = "MotionWarping에서 사용하는 타겟 이름. 몽타주의 MotionWarping Notify와 일치해야 함."))
 	FName WarpTargetName = TEXT("ParryTarget");
 
-	/** 처형 시 플레이어-몬스터 거리 (cm) */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
-		meta = (DisplayName = "처형 거리", ClampMin = "50.0", ClampMax = "300.0",
-			ToolTip = "워프 후 플레이어와 적 사이의 거리 (cm). 값이 작을수록 적에게 더 가까이 붙음."))
-	float ExecutionDistance = 100.f;
-
-	/** 워프 위치를 적 기준 어디로 할지 (0=정면, 90=옆, 180=뒤) */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
-		meta = (DisplayName = "워프 각도 오프셋(도)", ClampMin = "0.0", ClampMax = "360.0",
-			ToolTip = "적 기준 워프 방향. 0=적 정면(샷건), 90=적 옆, 180=적 뒤(권총 뒤통수 사격). 무기별로 다르게 세팅."))
-	float WarpAngleOffset = 180.f;
-
-	/** 워프 후 플레이어가 적을 바라보도록 회전할지 */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
-		meta = (DisplayName = "워프 후 적 방향 회전",
-			ToolTip = "true면 워프 후 자동으로 적을 바라봄. false면 워프 시 방향 그대로 유지."))
-	bool bFaceEnemyAfterWarp = true;
-
 	/** 워프 시 히어로 원래 Z 높이 유지 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
 		meta = (DisplayName = "워프 시 원래 높이 유지",
-			ToolTip = "true면 워프 후 히어로의 원래 Z 높이를 유지. false면 적의 Z 높이로 이동. 적이 높은 곳에 있으면 false가 자연스러움."))
+			ToolTip = "true면 워프 후 히어로의 원래 Z 높이를 유지. false면 적의 Z 높이로 이동."))
 	bool bKeepHeroZOnWarp = true;
 
 	/** 워프 위치 Z 오프셋 (cm) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
 		meta = (DisplayName = "워프 Z 오프셋", ClampMin = "-200.0", ClampMax = "200.0",
-			ToolTip = "워프 위치의 Z축 추가 오프셋 (cm). 캐릭터가 지면에 정확히 닿도록 미세 조정. 양수=위, 음수=아래."))
+			ToolTip = "워프 위치의 Z축 추가 오프셋 (cm). 양수=위, 음수=아래."))
 	float WarpZOffset = 0.f;
 
 	/** 처형 후 넉백 강도 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|PostExecution",
 		meta = (DisplayName = "넉백 강도", ClampMin = "0.0", ClampMax = "2000.0",
-			ToolTip = "처형 완료 후 적을 밀어내는 힘. 0이면 넉백 없음. 사망 연출용."))
+			ToolTip = "처형 완료 후 적을 밀어내는 힘. 0이면 넉백 없음."))
 	float PostParryKnockbackStrength = 600.f;
 
 	/** 사후 무적 시간 (초) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|PostExecution",
 		meta = (DisplayName = "사후 무적 시간(초)", ClampMin = "0.0", ClampMax = "5.0",
-			ToolTip = "처형 완료 후 플레이어가 무적 상태로 유지되는 시간 (초). 처형 후 안전하게 빠져나올 여유."))
+			ToolTip = "처형 완료 후 무적 상태 유지 시간 (초)."))
 	float PostParryInvincibleDuration = 1.0f;
-
-	/** 카메라 줌인 — 스프링암 길이 배율 */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
-		meta = (DisplayName = "카메라 암 배율", ClampMin = "0.1", ClampMax = "1.0",
-			ToolTip = "처형 중 스프링암 길이를 원래 값의 몇 배로 줄일지. 0.6이면 40% 줌인. 값이 작을수록 캐릭터에 더 가까워짐."))
-	float CameraArmLengthMultiplier = 0.6f;
-
-	/** 카메라 줌인 — FOV 배율 */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
-		meta = (DisplayName = "카메라 FOV 배율", ClampMin = "0.5", ClampMax = "1.0",
-			ToolTip = "처형 중 FOV를 원래 값의 몇 배로 줄일지. 0.85면 15% 좁아짐. 값이 작을수록 더 좁고 집중적인 화면."))
-	float CameraFOVMultiplier = 0.85f;
-
-	/** 처형 중 카메라 타겟 오프셋 — SpringArm SocketOffset에 더해짐 */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
-		meta = (DisplayName = "카메라 타겟 오프셋",
-			ToolTip = "처형 중 카메라가 바라보는 지점의 오프셋. X=전후, Y=좌우, Z=상하. (0,0,50)이면 캐릭터 머리 위를 바라봄."))
-	FVector CameraTargetOffset = FVector::ZeroVector;
-
-	/** 카메라 복귀 보간 속도 — FInterpTo의 InterpSpeed. 클수록 빨리 돌아감 */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
-		meta = (DisplayName = "카메라 복귀 속도", ClampMin = "0.5", ClampMax = "20.0",
-			ToolTip = "처형 종료 후 카메라가 원래 위치로 돌아가는 속도. 1=~1.5초(느림), 3=~0.5초(RE느낌), 5=~0.3초(빠름)."))
-	float CameraReturnSpeed = 3.0f;
-
-	/** 카메라 복귀 시작 전 대기 시간 (초) */
-	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
-		meta = (DisplayName = "카메라 복귀 딜레이(초)", ClampMin = "0.0", ClampMax = "2.0",
-			ToolTip = "처형 종료 후 카메라 복귀가 시작되기까지의 대기 시간. 0이면 즉시 복귀 시작."))
-	float CameraReturnDelay = 0.0f;
 
 	// ═══════════════════════════════════════════════════════════
 	// GAS 오버라이드
@@ -217,4 +169,21 @@ private:
 
 	/** 카메라 복귀 보간 타이머 — GA GC 후에도 안전하게 동작하도록 TSharedPtr */
 	TSharedPtr<FTimerHandle> CameraReturnTimerHandle;
+
+	// ═══════════════════════════════════════════════════════════
+	// 무기에서 캐싱한 카메라/워프 설정 (ActivateAbility에서 읽음)
+	// ═══════════════════════════════════════════════════════════
+	float CachedWarpAngleOffset = 180.f;
+	float CachedExecutionDistance = 100.f;
+	bool bCachedFaceEnemyAfterWarp = true;
+	float CachedArmLengthMul = 0.6f;
+	float CachedFOVMul = 0.85f;
+	float CachedYawOffset = 0.0f;
+	FVector CachedCameraTargetOffset = FVector::ZeroVector;
+	float CachedReturnSpeed = 3.0f;
+	float CachedReturnDelay = 0.0f;
+
+	/** ControlRotation/bUseControllerRotationYaw 저장 (카메라 정면 배치용) */
+	float SavedControlRotationYaw = 0.f;
+	bool bSavedUseControllerRotationYaw = true;
 };
