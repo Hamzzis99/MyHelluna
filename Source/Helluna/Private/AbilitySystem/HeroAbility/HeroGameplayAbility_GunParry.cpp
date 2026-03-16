@@ -21,7 +21,6 @@
 #include "Engine/OverlapResult.h"
 #include "GameMode/HellunaDefenseGameMode.h"
 #include "Character/EnemyComponent/HellunaHealthComponent.h"
-#include "UObject/UnrealType.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGunParry, Log, All);
 
@@ -252,7 +251,14 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		const FVector EnemyForward = Enemy->GetActorForwardVector();
 		const FVector EnemyLocation = Enemy->GetActorLocation();
 		const FVector OffsetDir = EnemyForward.RotateAngleAxis(WarpAngleOffset, FVector::UpVector);
-		const FVector WarpLocation = EnemyLocation + OffsetDir * ExecutionDistance;
+		FVector WarpLocation = EnemyLocation + OffsetDir * ExecutionDistance;
+
+		// [Fix: camera-warp-tuning] Z축 처리
+		if (bKeepHeroZOnWarp)
+		{
+			WarpLocation.Z = HeroLocBefore.Z;
+		}
+		WarpLocation.Z += WarpZOffset;
 
 		FRotator WarpRotation = Hero->GetActorRotation();
 		if (bFaceEnemyAfterWarp)
@@ -315,19 +321,9 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		}
 	}
 
-	// [Fix: bug-005] ABP PlayFullBody=true → 전신 몽타주 재생
-	if (UAnimInstance* AnimInst = Hero->GetMesh()->GetAnimInstance())
-	{
-		FProperty* Prop = AnimInst->GetClass()->FindPropertyByName(TEXT("PlayFullBody"));
-		if (Prop)
-		{
-			if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
-			{
-				BoolProp->SetPropertyValue_InContainer(AnimInst, true);
-				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] PlayFullBody = true"));
-			}
-		}
-	}
+	// [Fix: bug-005] Hero.PlayFullBody=true → ABP가 매 틱 읽어서 전신 몽타주 재생
+	Hero->PlayFullBody = true;
+	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] Hero.PlayFullBody = true"));
 
 	ExecutionMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this, NAME_None, ExecutionMontage, 1.f);
@@ -549,19 +545,9 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 	// ═══════════════════════════════════════════════════════════
 	if (Hero)
 	{
-		// [Fix: bug-005] ABP PlayFullBody 원복
-		if (UAnimInstance* AnimInst = Hero->GetMesh()->GetAnimInstance())
-		{
-			FProperty* Prop = AnimInst->GetClass()->FindPropertyByName(TEXT("PlayFullBody"));
-			if (Prop)
-			{
-				if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
-				{
-					BoolProp->SetPropertyValue_InContainer(AnimInst, false);
-					UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] PlayFullBody = false"));
-				}
-			}
-		}
+		// [Fix: bug-005] Hero.PlayFullBody 원복
+		Hero->PlayFullBody = false;
+		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Hero.PlayFullBody = false"));
 
 		Hero->UnlockMoveInput();
 		Hero->UnlockLookInput();
@@ -774,6 +760,13 @@ void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Her
 	{
 		SavedArmLength = Boom->TargetArmLength;
 		Boom->TargetArmLength = SavedArmLength * CameraArmLengthMultiplier;
+
+		// CameraTargetOffset → SocketOffset에 더하기
+		if (!CameraTargetOffset.IsZero())
+		{
+			SavedSocketOffset = Boom->SocketOffset;
+			Boom->SocketOffset += CameraTargetOffset;
+		}
 	}
 
 	if (UCameraComponent* Camera = Hero->GetFollowCamera())
@@ -783,8 +776,9 @@ void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Her
 	}
 
 	bCameraEffectActive = true;
-	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] BEGIN — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f"),
-		SavedArmLength, SavedArmLength * CameraArmLengthMultiplier, SavedFOV, SavedFOV * CameraFOVMultiplier);
+	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] BEGIN — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f, SocketOffset=%s"),
+		SavedArmLength, SavedArmLength * CameraArmLengthMultiplier, SavedFOV, SavedFOV * CameraFOVMultiplier,
+		*CameraTargetOffset.ToString());
 }
 
 void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
@@ -795,6 +789,11 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	if (USpringArmComponent* Boom = Hero->GetCameraBoom())
 	{
 		Boom->TargetArmLength = SavedArmLength;
+
+		if (!CameraTargetOffset.IsZero())
+		{
+			Boom->SocketOffset = SavedSocketOffset;
+		}
 	}
 
 	if (UCameraComponent* Camera = Hero->GetFollowCamera())
@@ -803,5 +802,5 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	}
 
 	bCameraEffectActive = false;
-	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] END — ArmLength→%.0f, FOV→%.0f"), SavedArmLength, SavedFOV);
+	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] END — ArmLength→%.0f, FOV→%.0f, SocketOffset 원복"), SavedArmLength, SavedFOV);
 }

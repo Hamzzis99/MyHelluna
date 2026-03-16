@@ -87,6 +87,18 @@ protected:
 			ToolTip = "true면 워프 후 자동으로 적을 바라봄. false면 워프 시 방향 그대로 유지."))
 	bool bFaceEnemyAfterWarp = true;
 
+	/** 워프 시 히어로 원래 Z 높이 유지 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
+		meta = (DisplayName = "워프 시 원래 높이 유지",
+			ToolTip = "true면 워프 후 히어로의 원래 Z 높이를 유지. false면 적의 Z 높이로 이동. 적이 높은 곳에 있으면 false가 자연스러움."))
+	bool bKeepHeroZOnWarp = true;
+
+	/** 워프 위치 Z 오프셋 (cm) */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
+		meta = (DisplayName = "워프 Z 오프셋", ClampMin = "-200.0", ClampMax = "200.0",
+			ToolTip = "워프 위치의 Z축 추가 오프셋 (cm). 캐릭터가 지면에 정확히 닿도록 미세 조정. 양수=위, 음수=아래."))
+	float WarpZOffset = 0.f;
+
 	/** 처형 후 넉백 강도 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|PostExecution",
 		meta = (DisplayName = "넉백 강도", ClampMin = "0.0", ClampMax = "2000.0",
@@ -110,6 +122,12 @@ protected:
 		meta = (DisplayName = "카메라 FOV 배율", ClampMin = "0.5", ClampMax = "1.0",
 			ToolTip = "처형 중 FOV를 원래 값의 몇 배로 줄일지. 0.85면 15% 좁아짐. 값이 작을수록 더 좁고 집중적인 화면."))
 	float CameraFOVMultiplier = 0.85f;
+
+	/** 처형 중 카메라 타겟 오프셋 — SpringArm SocketOffset에 더해짐 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Camera",
+		meta = (DisplayName = "카메라 타겟 오프셋",
+			ToolTip = "처형 중 카메라가 바라보는 지점의 오프셋. X=전후, Y=좌우, Z=상하. (0,0,50)이면 캐릭터 머리 위를 바라봄."))
+	FVector CameraTargetOffset = FVector::ZeroVector;
 
 	// ═══════════════════════════════════════════════════════════
 	// GAS 오버라이드
@@ -182,5 +200,6 @@ private:
 	/** 카메라 연출 전 원래 값 저장 */
 	float SavedArmLength = 0.f;
 	float SavedFOV = 0.f;
+	FVector SavedSocketOffset = FVector::ZeroVector;
 	bool bCameraEffectActive = false;
 };
