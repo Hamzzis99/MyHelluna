@@ -15,6 +15,7 @@
  */
 
 class AHellunaHeroCharacter;
+class UCameraShakeBase;
 
 UENUM(BlueprintType)
 enum class EWeaponFireMode : uint8
@@ -110,6 +111,20 @@ public:
 			EditCondition = "bCanParry", EditConditionHides,
 			ToolTip = "건패링 처형 시 플레이어가 재생할 몽타주. 무기마다 다른 연출."))
 	TObjectPtr<UAnimMontage> ParryExecutionMontage = nullptr;
+
+	/** 처형 총 발사 순간 카메라 셰이크 클래스 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "처형 카메라 셰이크",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 총 발사 순간에 재생할 카메라 셰이크 클래스. BP에서 카메라 셰이크 에셋을 지정. nullptr이면 셰이크 없음."))
+	TSubclassOf<UCameraShakeBase> ParryExecutionCameraShake = nullptr;
+
+	/** 처형 총 발사 순간 카메라 셰이크 강도 배율 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "처형 셰이크 강도", ClampMin = "0.0", ClampMax = "5.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "카메라 셰이크 강도 배율. 1.0=기본, 2.0=두 배 강하게. 권총=1.0, 샷건=2.0 추천."))
+	float ParryExecutionShakeScale = 1.0f;
 
 	/** 적 기준 워프 방향 (도) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",

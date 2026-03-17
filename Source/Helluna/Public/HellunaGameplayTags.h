@@ -78,4 +78,7 @@ namespace HellunaGameplayTags
 	HELLUNA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Enemy_Type_Humanoid);
 	HELLUNA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Enemy_State_Staggered);
 
+	/** 건패링 - GameplayEvent **/
+	HELLUNA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Parry_Fire);
+
 }

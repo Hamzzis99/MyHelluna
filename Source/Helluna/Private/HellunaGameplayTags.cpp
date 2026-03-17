@@ -69,5 +69,6 @@ namespace HellunaGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Enemy_Ability_Parryable, "Enemy.Ability.Parryable");
 	UE_DEFINE_GAMEPLAY_TAG(Enemy_Type_Humanoid, "Enemy.Type.Humanoid");
 	UE_DEFINE_GAMEPLAY_TAG(Enemy_State_Staggered, "Enemy.State.Staggered");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Parry_Fire, "Event.Parry.Fire");
 
 }

@@ -10,6 +10,10 @@ class AHellunaEnemyCharacter;
 class AHeroWeapon_GunBase;
 class UHellunaAbilitySystemComponent;
 class UAbilityTask_PlayMontageAndWait;
+class UAbilityTask_WaitGameplayEvent;
+class UCameraShakeBase;
+
+HELLUNA_API DECLARE_LOG_CATEGORY_EXTERN(LogGunParry, Log, All);
 
 /**
  * 건패링 GA — 바이오하자드 RE 스타일 카운터 처형
@@ -136,8 +140,18 @@ private:
 	UFUNCTION()
 	void OnExecutionMontageInterrupted();
 
+	/** 총 발사 AnimNotify가 전송한 GameplayEvent 수신 */
+	UFUNCTION()
+	void OnParryExecutionFireEvent(FGameplayEventData Payload);
+
 	/** 처형 종료 공통 처리 (사망+넉백+태그 정리) */
 	void HandleExecutionFinished(bool bWasCancelled);
+
+	/** 총 발사 프레임에 서버 킬 처리 (Notify/폴백 공용) */
+	void ProcessExecutionKill(bool bIsFallback);
+
+	/** 총 발사 프레임 카메라 셰이크 */
+	void PlayParryExecutionCameraShake(AHellunaHeroCharacter* Hero) const;
 
 	/** 카메라 연출 시작 (로컬만) */
 	void BeginCameraEffect(AHellunaHeroCharacter* Hero);
@@ -156,10 +170,16 @@ private:
 	UPROPERTY()
 	TObjectPtr<UAbilityTask_PlayMontageAndWait> ExecutionMontageTask;
 
+	UPROPERTY()
+	TObjectPtr<UAbilityTask_WaitGameplayEvent> ParryFireEventTask;
+
 	FTimerHandle PostInvincibleTimerHandle;
 
 	/** HandleExecutionFinished가 이미 호출되었는지 (EndAbility에서 서버 킬 로직 보장용) */
 	bool bHandleExecutionFinishedCalled = false;
+
+	/** 총 발사 프레임 킬/셰이크 처리 완료 여부 */
+	bool bKillProcessed = false;
 
 	/** 카메라 연출 전 원래 값 저장 */
 	float SavedArmLength = 0.f;
@@ -183,6 +203,8 @@ private:
 	FVector CachedCameraTargetOffset = FVector::ZeroVector;
 	float CachedReturnSpeed = 3.0f;
 	float CachedReturnDelay = 0.0f;
+	TSubclassOf<UCameraShakeBase> CachedParryExecutionCameraShake = nullptr;
+	float CachedParryExecutionShakeScale = 1.0f;
 
 	/** ControlRotation/bUseControllerRotationYaw 저장 (카메라 정면 배치용) */
 	float SavedControlRotationYaw = 0.f;
