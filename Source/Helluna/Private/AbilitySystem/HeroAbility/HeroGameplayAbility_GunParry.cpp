@@ -925,8 +925,8 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	const float InterpSpeed = CachedReturnSpeed;
 	const bool bHasOffset = !CachedCameraTargetOffset.IsZero();
 
-	// ControlRotation 복귀 목표 = 캐릭터 뒤(= 캐릭터 정면 방향 Yaw)
-	const float TargetControlYaw = Hero->GetActorRotation().Yaw;
+	// ControlRotation 복귀 목표 = 처형 전 원래 보던 방향
+	const float TargetControlYaw = SavedControlRotationYaw;
 	const bool bSavedUseCtrlYaw = bSavedUseControllerRotationYaw;
 	const bool bSavedCollisionTest = bSavedDoCollisionTest;
 
