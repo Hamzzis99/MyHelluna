@@ -166,6 +166,7 @@ private:
 	float SavedFOV = 0.f;
 	FVector SavedSocketOffset = FVector::ZeroVector;
 	bool bCameraEffectActive = false;
+	bool bSavedDoCollisionTest = true;
 
 	/** 카메라 복귀 보간 타이머 — GA GC 후에도 안전하게 동작하도록 TSharedPtr */
 	TSharedPtr<FTimerHandle> CameraReturnTimerHandle;

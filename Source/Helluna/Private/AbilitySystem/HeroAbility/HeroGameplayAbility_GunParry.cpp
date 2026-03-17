@@ -832,6 +832,7 @@ void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Her
 			Boom->TargetArmLength = SavedArmLength;
 			if (!CachedCameraTargetOffset.IsZero())
 				Boom->SocketOffset = SavedSocketOffset;
+			Boom->bDoCollisionTest = bSavedDoCollisionTest;
 		}
 		if (UCameraComponent* Camera = Hero->GetFollowCamera())
 			Camera->SetFieldOfView(SavedFOV);
@@ -850,6 +851,10 @@ void UHeroGameplayAbility_GunParry::BeginCameraEffect(AHellunaHeroCharacter* Her
 			SavedSocketOffset = Boom->SocketOffset;
 			Boom->SocketOffset += CachedCameraTargetOffset;
 		}
+
+		// [Fix: collision-probe] 카메라 180도 공전 시 캐릭터 메시 관통 방지
+		bSavedDoCollisionTest = Boom->bDoCollisionTest;
+		Boom->bDoCollisionTest = false;
 	}
 
 	if (UCameraComponent* Camera = Hero->GetFollowCamera())
@@ -879,6 +884,7 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 		{
 			Boom->TargetArmLength = SavedArmLength;
 			if (!CachedCameraTargetOffset.IsZero()) Boom->SocketOffset = SavedSocketOffset;
+			Boom->bDoCollisionTest = bSavedDoCollisionTest;
 		}
 		if (UCameraComponent* Camera = Hero->GetFollowCamera())
 			Camera->SetFieldOfView(SavedFOV);
@@ -903,6 +909,7 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	// ControlRotation 복귀 목표 = 캐릭터 뒤(= 캐릭터 정면 방향 Yaw)
 	const float TargetControlYaw = Hero->GetActorRotation().Yaw;
 	const bool bSavedUseCtrlYaw = bSavedUseControllerRotationYaw;
+	const bool bSavedCollisionTest = bSavedDoCollisionTest;
 
 	// TSharedPtr로 람다 내부에서 self-clear 가능
 	TSharedPtr<FTimerHandle> TimerHandle = MakeShared<FTimerHandle>();
@@ -913,7 +920,7 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 
 	auto InterpLambda = [WeakBoom, WeakCamera, WeakWorld, WeakPC, WeakHero, TimerHandle, TickCount,
 		TargetArmLength, TargetFOV, TargetSocketOffset, TargetControlYaw,
-		InterpSpeed, bHasOffset, bSavedUseCtrlYaw, TickRate]()
+		InterpSpeed, bHasOffset, bSavedUseCtrlYaw, bSavedCollisionTest, TickRate]()
 	{
 		++(*TickCount);
 
@@ -1002,6 +1009,12 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 			{
 				WeakHero->bUseControllerRotationYaw = bSavedUseCtrlYaw;
 				WeakHero->UnlockLookInput();
+			}
+
+			// [Fix: collision-probe] 카메라 충돌 프로브 원복
+			if (WeakBoom.IsValid())
+			{
+				WeakBoom->bDoCollisionTest = bSavedCollisionTest;
 			}
 
 			const float FinalYaw = WeakPC.IsValid() ? WeakPC->GetControlRotation().Yaw : TargetControlYaw;
