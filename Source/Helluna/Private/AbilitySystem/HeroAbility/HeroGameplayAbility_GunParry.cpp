@@ -6,6 +6,8 @@
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/StateTreeComponent.h"
+#include "AIController.h"
 #include "MotionWarpingComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -230,8 +232,25 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] SERVER: Hero Invincible+ParryExecution 부여"));
 		}
 
-		// 4) 적 이동 잠금
+		// 4) 적 이동 잠금 + AI 중단
 		Enemy->LockMovementAndFaceTarget(Hero);
+
+		// 적 AI(StateTree) 중단 — AIController에서 찾기
+		if (AAIController* AIC = Cast<AAIController>(Enemy->GetController()))
+		{
+			if (UStateTreeComponent* STComp = AIC->FindComponentByClass<UStateTreeComponent>())
+			{
+				STComp->StopLogic(TEXT("GunParry"));
+				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] SERVER: Enemy StateTree 중단"));
+			}
+		}
+
+		// 적 진행 중인 몽타주 전부 중단 (공격 모션 멈추기)
+		if (UAnimInstance* EnemyAnim = Enemy->GetMesh()->GetAnimInstance())
+		{
+			EnemyAnim->StopAllMontages(0.1f);
+			UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] SERVER: Enemy 몽타주 전부 중단"));
+		}
 
 		// 5) 적 처형 피격 몽타주 (Multicast — 모든 클라에서 재생)
 		Enemy->Multicast_PlayParryVictim();
