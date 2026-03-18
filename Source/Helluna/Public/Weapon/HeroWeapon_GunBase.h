@@ -189,6 +189,13 @@ public:
 			ToolTip = "처형 후 카메라 복귀 시작까지 대기(초). 권총=0.3, 샷건=0.1 추천."))
 	float CameraReturnDelay = 0.0f;
 
+	/** 패링 시 카메라가 처형 시점으로 회전하는 속도(InterpSpeed) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Camera",
+		meta = (DisplayName = "카메라 진입 속도", ClampMin = "0.0", ClampMax = "30.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "패링 시 카메라가 처형 시점으로 회전하는 속도(InterpSpeed). 값이 클수록 빠르게 회전. 8=~0.2초(빠른 스윙), 5=~0.3초(중간), 3=~0.5초(느림). 0이면 즉시(기존 동작)."))
+	float CameraEntrySpeed = 8.0f;
+
 	// ═══════════════════════════════════════════════════════════
 	// 건패링 워프 이펙트 (나이아가라)
 	// ═══════════════════════════════════════════════════════════

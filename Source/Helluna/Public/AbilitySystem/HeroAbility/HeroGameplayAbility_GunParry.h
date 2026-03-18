@@ -217,6 +217,14 @@ private:
 	bool bSavedUseControllerRotationYaw = true;
 
 	// ═══════════════════════════════════════════════════════════
+	// 카메라 스무스 진입 (InterpTo)
+	// ═══════════════════════════════════════════════════════════
+	FTimerHandle CameraEntryTimerHandle;
+	FRotator TargetCameraEntryRotation = FRotator::ZeroRotator;
+	float CachedCameraEntrySpeed = 8.0f;
+	int32 CameraEntryTickCount = 0;
+
+	// ═══════════════════════════════════════════════════════════
 	// 워프 등장 딜레이
 	// ═══════════════════════════════════════════════════════════
 	FTimerHandle WarpAppearTimerHandle;

@@ -313,6 +313,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		CachedCameraTargetOffset = Weapon->CameraTargetOffset;
 		CachedReturnSpeed = Weapon->CameraReturnSpeed;
 		CachedReturnDelay = Weapon->CameraReturnDelay;
+		CachedCameraEntrySpeed = Weapon->CameraEntrySpeed;
 		CachedParryExecutionCameraShake = Weapon->ParryExecutionCameraShake;
 		CachedParryExecutionShakeScale = Weapon->ParryExecutionShakeScale;
 
@@ -409,9 +410,67 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 				CameraRotation.Yaw += 180.f + CachedYawOffset;
 				CameraRotation.Pitch = 0.f;  // 카메라 기울어짐 방지
 
-				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 카메라 정면 배치: CharacterYaw=%.1f, CameraYaw=%.1f (WarpYaw+180+Offset=%.1f+180+%.1f)"),
-					WarpRotation.Yaw, CameraRotation.Yaw, WarpRotation.Yaw, CachedYawOffset);
-				PC->SetControlRotation(CameraRotation);
+				if (CachedCameraEntrySpeed <= 0.f)
+				{
+					// Speed=0 → 즉시 세팅 (기존 동작)
+					PC->SetControlRotation(CameraRotation);
+					UE_LOG(LogGunParry, Warning, TEXT("[CameraEntry] Speed=0 — 즉시 SetControlRotation Yaw=%.1f"),
+						CameraRotation.Yaw);
+				}
+				else
+				{
+					// InterpTo로 부드럽게 진입
+					TargetCameraEntryRotation = CameraRotation;
+					CameraEntryTickCount = 0;
+
+					const float CurrentYaw = PC->GetControlRotation().Yaw;
+					UE_LOG(LogGunParry, Warning, TEXT("[CameraEntry] 시작 — CurrentYaw=%.1f → TargetYaw=%.1f (Speed=%.1f)"),
+						CurrentYaw, CameraRotation.Yaw, CachedCameraEntrySpeed);
+
+					if (UWorld* World = Hero->GetWorld())
+					{
+						constexpr float EntryTickRate = 0.016f;
+						World->GetTimerManager().SetTimer(
+							CameraEntryTimerHandle,
+							FTimerDelegate::CreateWeakLambda(this, [this, EntryTickRate]()
+							{
+								++CameraEntryTickCount;
+
+								AHellunaHeroCharacter* LambdaHero = Cast<AHellunaHeroCharacter>(GetAvatarActorFromActorInfo());
+								if (!LambdaHero) { return; }
+
+								APlayerController* LambdaPC = Cast<APlayerController>(LambdaHero->GetController());
+								if (!LambdaPC) { return; }
+
+								FRotator CurCtrl = LambdaPC->GetControlRotation();
+								const float NewYaw = FMath::FInterpTo(CurCtrl.Yaw, TargetCameraEntryRotation.Yaw, EntryTickRate, CachedCameraEntrySpeed);
+								const float NewPitch = FMath::FInterpTo(CurCtrl.Pitch, TargetCameraEntryRotation.Pitch, EntryTickRate, CachedCameraEntrySpeed);
+
+								CurCtrl.Yaw = NewYaw;
+								CurCtrl.Pitch = NewPitch;
+								LambdaPC->SetControlRotation(CurCtrl);
+
+								// 도착 판정
+								const bool bYawDone = FMath::IsNearlyEqual(FMath::UnwindDegrees(NewYaw - TargetCameraEntryRotation.Yaw), 0.f, 1.0f);
+								const bool bPitchDone = FMath::IsNearlyEqual(FMath::UnwindDegrees(NewPitch - TargetCameraEntryRotation.Pitch), 0.f, 0.5f);
+
+								if (bYawDone && bPitchDone)
+								{
+									// 정확한 값으로 스냅
+									LambdaPC->SetControlRotation(TargetCameraEntryRotation);
+
+									if (UWorld* W = LambdaHero->GetWorld())
+									{
+										W->GetTimerManager().ClearTimer(CameraEntryTimerHandle);
+									}
+
+									UE_LOG(LogGunParry, Warning, TEXT("[CameraEntry] 완료 — Yaw=%.1f (소요 프레임=%d)"),
+										TargetCameraEntryRotation.Yaw, CameraEntryTickCount);
+								}
+							}),
+							EntryTickRate, true);
+					}
+				}
 			}
 		}
 		const float DistToEnemy = FVector::Dist(WarpLocation, EnemyLocation);
@@ -931,6 +990,15 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 	{
 		UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] SERVER: HandleExecutionFinished 미호출 → 여기서 실행"));
 		HandleExecutionFinished(false);
+	}
+
+	// 카메라 진입 InterpTo 타이머 안전 해제
+	if (CameraEntryTimerHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(CameraEntryTimerHandle);
+		}
 	}
 
 	// 워프 등장 딜레이 안전 원복 — GA 취소/종료 시 메시 반드시 복원
