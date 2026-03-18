@@ -265,7 +265,7 @@ public:
 
 	/** 워프 잔상 나이아가라 이펙트 — 서버에서 호출, 모든 클라에서 스폰 */
 	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_PlayParryWarpVFX(UNiagaraSystem* Effect, FVector Location, FRotator Rotation, float Scale, FLinearColor Color);
+	void Multicast_PlayParryWarpVFX(UNiagaraSystem* Effect, FVector Location, FRotator Rotation, float Scale, FLinearColor Color, bool bGhostMesh, float GhostOpacity);
 
 	/** 워프 잔상 VFX 중단 — AN_ParryExecutionFire 타이밍에 서버에서 호출 */
 	UFUNCTION(NetMulticast, Unreliable)

@@ -214,6 +214,24 @@ public:
 			ToolTip = "워프 잔상 이펙트 색상. 무기별로 다른 색 가능. 기본=SF 파란색."))
 	FLinearColor ParryWarpEffectColor = FLinearColor(0.2f, 0.5f, 1.0f, 1.0f);
 
+	// ═══════════════════════════════════════════════════════════
+	// 건패링 워프 고스트 메시 (Step 5)
+	// ═══════════════════════════════════════════════════════════
+
+	/** 워프 잔상에 캐릭터 메시 실루엣(고스트) 사용 여부. NS에 Mesh Renderer Emitter + "SkeletalMesh" User Parameter 필요. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "고스트 메시 사용",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "true면 워프 잔상에 캐릭터 메시 실루엣을 추가. 나이아가라 시스템에 SkeletalMesh User Parameter와 Mesh Renderer Emitter가 설정되어 있어야 함."))
+	bool bParryWarpGhostMesh = false;
+
+	/** 고스트 메시 초기 투명도 (0=완전 투명, 1=불투명). 나이아가라 User Parameter "GhostOpacity"로 전달. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "고스트 투명도", ClampMin = "0.0", ClampMax = "1.0",
+			EditCondition = "bCanParry && bParryWarpGhostMesh", EditConditionHides,
+			ToolTip = "고스트 메시 초기 투명도. 0=완전 투명, 1=불투명. 나이아가라에서 수명에 따라 페이드아웃."))
+	float ParryWarpGhostOpacity = 0.5f;
+
 	/** 워프 후 캐릭터가 도착지에 나타나기까지 딜레이(초). 0이면 즉시 나타남. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
 		meta = (DisplayName = "워프 등장 딜레이(초)", ClampMin = "0.0", ClampMax = "0.5",

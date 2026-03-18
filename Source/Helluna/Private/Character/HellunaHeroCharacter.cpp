@@ -1123,7 +1123,7 @@ void AHellunaHeroCharacter::Multicast_PlayHeroDeath_Implementation()
 // 서버에서 호출 → 모든 클라이언트에서 나이아가라 이펙트 스폰
 // =========================================================
 void AHellunaHeroCharacter::Multicast_PlayParryWarpVFX_Implementation(
-	UNiagaraSystem* Effect, FVector Location, FRotator Rotation, float Scale, FLinearColor Color)
+	UNiagaraSystem* Effect, FVector Location, FRotator Rotation, float Scale, FLinearColor Color, bool bGhostMesh, float GhostOpacity)
 {
 	if (!Effect)
 	{
@@ -1150,14 +1150,32 @@ void AHellunaHeroCharacter::Multicast_PlayParryWarpVFX_Implementation(
 	if (Comp)
 	{
 		Comp->SetNiagaraVariableLinearColor(TEXT("WarpColor"), Color);
+
+		// Step 5: 고스트 메시 — Hero의 SkeletalMesh를 나이아가라에 전달
+		if (bGhostMesh)
+		{
+			if (USkeletalMeshComponent* HeroMesh = GetMesh())
+			{
+				UNiagaraFunctionLibrary::OverrideSystemUserVariableSkeletalMeshComponent(
+					Comp, TEXT("SkeletalMesh"), HeroMesh);
+			}
+			Comp->SetNiagaraVariableFloat(TEXT("GhostOpacity"), GhostOpacity);
+			Comp->SetNiagaraVariableBool(TEXT("bGhostMesh"), true);
+		}
+		else
+		{
+			Comp->SetNiagaraVariableBool(TEXT("bGhostMesh"), false);
+		}
+
 		ActiveParryVFX.Add(Comp);
 	}
 
 	UE_LOG(LogGunParry, Verbose,
-		TEXT("[Multicast_PlayParryWarpVFX] VFX 스폰 — Effect=%s, Location=%s, Scale=%.1f"),
+		TEXT("[Multicast_PlayParryWarpVFX] VFX 스폰 — Effect=%s, Location=%s, Scale=%.1f, Ghost=%s"),
 		*Effect->GetName(),
 		*Location.ToString(),
-		Scale);
+		Scale,
+		bGhostMesh ? TEXT("Y") : TEXT("N"));
 }
 
 // =========================================================

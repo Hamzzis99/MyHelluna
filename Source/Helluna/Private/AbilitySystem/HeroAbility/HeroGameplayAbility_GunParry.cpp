@@ -352,19 +352,24 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			if (Hero->HasAuthority())
 			{
 				// 서버에서 Multicast 호출 → 모든 클라이언트에서 VFX 스폰
+				const bool bGhost = Weapon->bParryWarpGhostMesh;
+				const float GhostOpacity = Weapon->ParryWarpGhostOpacity;
+
 				Hero->Multicast_PlayParryWarpVFX(
 					Weapon->ParryWarpEffect,
 					HeroLocBefore,
 					Hero->GetActorRotation(),
 					Weapon->ParryWarpEffectScale,
-					Weapon->ParryWarpEffectColor);
+					Weapon->ParryWarpEffectColor,
+					bGhost, GhostOpacity);
 
 				Hero->Multicast_PlayParryWarpVFX(
 					Weapon->ParryWarpEffect,
 					WarpLocation,
 					WarpRotation,
 					Weapon->ParryWarpEffectScale,
-					Weapon->ParryWarpEffectColor);
+					Weapon->ParryWarpEffectColor,
+					bGhost, GhostOpacity);
 
 				UE_LOG(LogGunParry, Warning,
 					TEXT("[ActivateAbility] SERVER: Multicast_PlayParryWarpVFX 호출 — Effect=%s, 출발=%s, 도착=%s"),
