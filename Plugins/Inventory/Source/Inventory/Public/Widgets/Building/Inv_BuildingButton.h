@@ -11,6 +11,7 @@ class UButton;
 class UImage;
 class UTextBlock;
 class UHorizontalBox;
+class UStaticMesh;
 
 /**
  * 건물 분류 카테고리
@@ -23,6 +24,9 @@ enum class EBuildCategory : uint8
 	Auxiliary     UMETA(DisplayName = "보조"),
 	Construction  UMETA(DisplayName = "건설"),
 };
+
+// 건설 카드 클릭 델리게이트 (BuildMenu에서 바인딩)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBuildingCardClicked, UInv_BuildingButton*, ClickedButton);
 
 /**
  * 빌드 메뉴에서 개별 건물 선택 버튼 위젯
@@ -37,6 +41,33 @@ public:
 	// 건물 정보 설정
 	void SetBuildingInfo(const FText& Name, UTexture2D* Icon, TSubclassOf<AActor> GhostClass, TSubclassOf<AActor> BuildingClass, int32 ID);
 
+	// 건설 카드 클릭 시 BuildMenu에 알리는 델리게이트
+	FOnBuildingCardClicked OnCardClicked;
+
+	// 기존 건설 로직 실행 (디테일 패널의 Button_Build에서 호출)
+	void ExecuteBuild();
+
+	// === Getter 함수들 (BuildMenu 디테일 패널에서 사용) ===
+	const FText& GetBuildingName() const { return BuildingName; }
+	const FText& GetBuildingDescription() const { return BuildingDescription; }
+	UStaticMesh* GetPreviewMesh() const { return PreviewMesh; }
+	const FRotator& GetPreviewRotationOffset() const { return PreviewRotationOffset; }
+	float GetPreviewCameraDistance() const { return PreviewCameraDistance; }
+	TSubclassOf<AActor> GetActualBuildingClass() const { return ActualBuildingClass; }
+	TSubclassOf<AActor> GetGhostActorClass() const { return GhostActorClass; }
+	int32 GetBuildingID() const { return BuildingID; }
+
+	// 재료 정보 Getter
+	const FGameplayTag& GetRequiredMaterialTag() const { return RequiredMaterialTag; }
+	int32 GetRequiredAmount() const { return RequiredAmount; }
+	UTexture2D* GetMaterialIcon1() const { return MaterialIcon1; }
+	const FGameplayTag& GetRequiredMaterialTag2() const { return RequiredMaterialTag2; }
+	int32 GetRequiredAmount2() const { return RequiredAmount2; }
+	UTexture2D* GetMaterialIcon2() const { return MaterialIcon2; }
+	const FGameplayTag& GetRequiredMaterialTag3() const { return RequiredMaterialTag3; }
+	int32 GetRequiredAmount3() const { return RequiredAmount3; }
+	UTexture2D* GetMaterialIcon3() const { return MaterialIcon3; }
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
@@ -49,9 +80,9 @@ private:
 	void OnButtonClicked();
 
 	// 재료 체크 함수
-	bool HasRequiredMaterials(); // const 제거
+	bool HasRequiredMaterials();
 	void UpdateButtonState();
-	
+
 	// 재료 UI 업데이트 (이미지 표시/숨김)
 	void UpdateMaterialUI();
 
@@ -70,7 +101,7 @@ private:
 	void OnInventoryStackChanged(const FInv_SlotAvailabilityResult& Result);
 
 	// === 블루프린트에서 바인딩할 위젯들 (meta = (BindWidget)) ===
-	
+
 	// 클릭 가능한 버튼
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> Button_Main;
@@ -84,7 +115,7 @@ private:
 	TObjectPtr<UTextBlock> Text_BuildingName;
 
 	// === 재료 UI 컨테이너 및 위젯 (반드시 Blueprint에 있어야 함) ===
-	
+
 	// 재료 1 컨테이너 (HorizontalBox)
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UHorizontalBox> HorizontalBox_Material1;
@@ -135,6 +166,11 @@ private:
 		DisplayName = "건물 이름", Tooltip = "빌드 메뉴에 표시될 건물의 이름입니다."))
 	FText BuildingName;
 
+	// 건설물 설명 (디테일 패널에 표시)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "건설", meta = (AllowPrivateAccess = "true",
+		DisplayName = "건설물 설명", Tooltip = "디테일 패널에 표시될 건설물의 설명 텍스트입니다.", MultiLine = "true"))
+	FText BuildingDescription;
+
 	// 건물 아이콘
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "건설", meta = (AllowPrivateAccess = "true",
 		DisplayName = "건물 아이콘", Tooltip = "빌드 메뉴에 표시될 건물의 아이콘 텍스처입니다."))
@@ -154,6 +190,23 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "건설", meta = (AllowPrivateAccess = "true",
 		DisplayName = "건물 ID", Tooltip = "건물을 식별하기 위한 고유 ID 값입니다."))
 	int32 BuildingID = 0;
+
+	// === 프리뷰 정보 (디테일 패널 3D 프리뷰용) ===
+
+	// 프리뷰 메시 (BP에서 직접 지정 — CDO 탐색보다 안전)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "건설|프리뷰", meta = (AllowPrivateAccess = "true",
+		DisplayName = "프리뷰 메시", Tooltip = "디테일 패널 3D 프리뷰에 표시할 StaticMesh입니다."))
+	TObjectPtr<UStaticMesh> PreviewMesh;
+
+	// 프리뷰 회전 오프셋
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "건설|프리뷰", meta = (AllowPrivateAccess = "true",
+		DisplayName = "프리뷰 회전 오프셋", Tooltip = "3D 프리뷰의 초기 회전 오프셋입니다."))
+	FRotator PreviewRotationOffset = FRotator::ZeroRotator;
+
+	// 프리뷰 카메라 거리 (0이면 자동 계산)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "건설|프리뷰", meta = (AllowPrivateAccess = "true",
+		DisplayName = "프리뷰 카메라 거리", Tooltip = "0이면 메시 Bounds 기반 자동 계산.", ClampMin = "0"))
+	float PreviewCameraDistance = 0.f;
 
 	// === 재료 정보 ===
 
@@ -202,4 +255,3 @@ private:
 		DisplayName = "재료 3 아이콘", Tooltip = "세 번째 재료의 아이콘 텍스처입니다."))
 	TObjectPtr<UTexture2D> MaterialIcon3;
 };
-

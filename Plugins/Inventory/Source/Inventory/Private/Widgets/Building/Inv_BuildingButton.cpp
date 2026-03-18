@@ -92,8 +92,16 @@ void UInv_BuildingButton::SetBuildingInfo(const FText& Name, UTexture2D* Icon, T
 
 void UInv_BuildingButton::OnButtonClicked()
 {
+	UE_LOG(LogTemp, Warning, TEXT("[BuildingButton] 카드 클릭 → 디테일 패널 열기 요청: %s"), *BuildingName.ToString());
+
+	// 디테일 패널 열기 요청 브로드캐스트 (BuildMenu에서 바인딩)
+	OnCardClicked.Broadcast(this);
+}
+
+void UInv_BuildingButton::ExecuteBuild()
+{
 #if INV_DEBUG_BUILD
-	UE_LOG(LogTemp, Warning, TEXT("=== BUILDING BUTTON CLICKED ==="));
+	UE_LOG(LogTemp, Warning, TEXT("=== BUILDING EXECUTE ==="));
 	UE_LOG(LogTemp, Warning, TEXT("Building Name: %s"), *BuildingName.ToString());
 	UE_LOG(LogTemp, Warning, TEXT("Building ID: %d"), BuildingID);
 #endif
@@ -105,7 +113,6 @@ void UInv_BuildingButton::OnButtonClicked()
 		UE_LOG(LogTemp, Warning, TEXT("=== 재료가 부족합니다! ==="));
 		UE_LOG(LogTemp, Warning, TEXT("필요한 재료: %s x %d"), *RequiredMaterialTag.ToString(), RequiredAmount);
 #endif
-		// TODO: UI 팝업 표시
 		return;
 	}
 
@@ -131,10 +138,10 @@ void UInv_BuildingButton::OnButtonClicked()
 
 	// Component에 건물 선택 알림 (재료 정보 포함!)
 	BuildingComp->OnBuildingSelectedFromWidget(
-		GhostActorClass, 
-		ActualBuildingClass, 
-		BuildingID, 
-		RequiredMaterialTag, 
+		GhostActorClass,
+		ActualBuildingClass,
+		BuildingID,
+		RequiredMaterialTag,
 		RequiredAmount,
 		RequiredMaterialTag2,
 		RequiredAmount2
