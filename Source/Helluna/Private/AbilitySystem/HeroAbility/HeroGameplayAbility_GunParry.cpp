@@ -349,32 +349,46 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			WarpRotation.Roll = 0.f;
 		}
 
-		// ─── 워프 잔상 나이아가라 이펙트 (워프 직전, 원래 위치에 스폰) ───
+		// ─── 워프 잔상 나이아가라 이펙트 (출발지 + 도착지 동시 스폰) ───
 		if (Weapon && Weapon->ParryWarpEffect)
 		{
 			const FVector EffectScale = FVector(Weapon->ParryWarpEffectScale);
-			UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+
+			// 출발지 이펙트 (원래 위치에서 사라지는 잔상)
+			UNiagaraComponent* DepartComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 				Hero->GetWorld(),
 				Weapon->ParryWarpEffect,
 				HeroLocBefore,
 				Hero->GetActorRotation(),
 				EffectScale,
-				true,  // bAutoDestroy
-				true,  // bAutoActivate
-				ENCPoolMethod::None
+				true, true, ENCPoolMethod::None
 			);
-			if (NiagaraComp)
+			if (DepartComp)
 			{
-				NiagaraComp->SetNiagaraVariableLinearColor(TEXT("WarpColor"), Weapon->ParryWarpEffectColor);
-
-				UE_LOG(LogGunParry, Warning,
-					TEXT("[ActivateAbility] %s: 워프 이펙트 스폰: Effect=%s, Location=%s, Scale=%.1f, Color=%s"),
-					bIsServer ? TEXT("SERVER") : TEXT("CLIENT"),
-					*Weapon->ParryWarpEffect->GetName(),
-					*HeroLocBefore.ToString(),
-					Weapon->ParryWarpEffectScale,
-					*Weapon->ParryWarpEffectColor.ToString());
+				DepartComp->SetNiagaraVariableLinearColor(TEXT("WarpColor"), Weapon->ParryWarpEffectColor);
 			}
+
+			// 도착지 이펙트 (워프 도착 위치에 등장하는 잔상)
+			UNiagaraComponent* ArriveComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				Hero->GetWorld(),
+				Weapon->ParryWarpEffect,
+				WarpLocation,
+				WarpRotation,
+				EffectScale,
+				true, true, ENCPoolMethod::None
+			);
+			if (ArriveComp)
+			{
+				ArriveComp->SetNiagaraVariableLinearColor(TEXT("WarpColor"), Weapon->ParryWarpEffectColor);
+			}
+
+			UE_LOG(LogGunParry, Warning,
+				TEXT("[ActivateAbility] %s: 워프 이펙트 스폰: Effect=%s, 출발=%s, 도착=%s, Scale=%.1f"),
+				bIsServer ? TEXT("SERVER") : TEXT("CLIENT"),
+				*Weapon->ParryWarpEffect->GetName(),
+				*HeroLocBefore.ToString(),
+				*WarpLocation.ToString(),
+				Weapon->ParryWarpEffectScale);
 		}
 		else
 		{
