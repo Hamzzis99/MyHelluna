@@ -343,6 +343,8 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		if (bCachedFaceEnemyAfterWarp)
 		{
 			WarpRotation = (EnemyLocation - WarpLocation).Rotation();
+			WarpRotation.Pitch = 0.f;  // 캐릭터 기울어짐 방지
+			WarpRotation.Roll = 0.f;
 		}
 
 		Hero->SetActorLocationAndRotation(WarpLocation, WarpRotation);
@@ -367,6 +369,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 				// 카메라를 캐릭터 정면/옆에 배치: WarpYaw + 180(정면) + YawOffset(미세조정)
 				FRotator CameraRotation = WarpRotation;
 				CameraRotation.Yaw += 180.f + CachedYawOffset;
+				CameraRotation.Pitch = 0.f;  // 카메라 기울어짐 방지
 
 				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 카메라 정면 배치: CharacterYaw=%.1f, CameraYaw=%.1f (WarpYaw+180+Offset=%.1f+180+%.1f)"),
 					WarpRotation.Yaw, CameraRotation.Yaw, WarpRotation.Yaw, CachedYawOffset);
