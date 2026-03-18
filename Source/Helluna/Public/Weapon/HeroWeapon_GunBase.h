@@ -189,6 +189,31 @@ public:
 			ToolTip = "처형 후 카메라 복귀 시작까지 대기(초). 권총=0.3, 샷건=0.1 추천."))
 	float CameraReturnDelay = 0.0f;
 
+	// ═══════════════════════════════════════════════════════════
+	// 건패링 워프 이펙트 (나이아가라)
+	// ═══════════════════════════════════════════════════════════
+
+	/** 패링 워프 시 스폰할 나이아가라 이펙트. 캐릭터 원래 위치에서 잔상이 남는 연출. nullptr이면 이펙트 없음. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "워프 잔상 이펙트",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "패링 워프 시 스폰할 나이아가라 이펙트. 캐릭터 원래 위치에서 잔상이 남는 연출. nullptr이면 이펙트 없음."))
+	TObjectPtr<UNiagaraSystem> ParryWarpEffect = nullptr;
+
+	/** 워프 이펙트 크기 배율. 1.0=기본, 2.0=두 배. 무기별로 다르게 세팅. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "워프 이펙트 크기", ClampMin = "0.1", ClampMax = "5.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "워프 이펙트 크기 배율. 1.0=기본, 2.0=두 배. 무기별로 다르게 세팅."))
+	float ParryWarpEffectScale = 1.0f;
+
+	/** 워프 잔상 이펙트 색상. 무기별로 다른 색 가능. 기본=SF 파란색. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "워프 이펙트 색상",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "워프 잔상 이펙트 색상. 무기별로 다른 색 가능. 기본=SF 파란색."))
+	FLinearColor ParryWarpEffectColor = FLinearColor(0.2f, 0.5f, 1.0f, 1.0f);
+
 
 protected:
 

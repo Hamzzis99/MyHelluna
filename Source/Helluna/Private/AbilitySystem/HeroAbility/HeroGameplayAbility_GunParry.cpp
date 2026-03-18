@@ -25,6 +25,8 @@
 #include "HellunaGameplayTags.h"
 #include "HellunaFunctionLibrary.h"
 #include "DebugHelper.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 #include "Kismet/KismetSystemLibrary.h"
 #include "Engine/OverlapResult.h"
@@ -345,6 +347,40 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			WarpRotation = (EnemyLocation - WarpLocation).Rotation();
 			WarpRotation.Pitch = 0.f;  // 캐릭터 기울어짐 방지
 			WarpRotation.Roll = 0.f;
+		}
+
+		// ─── 워프 잔상 나이아가라 이펙트 (워프 직전, 원래 위치에 스폰) ───
+		if (Weapon && Weapon->ParryWarpEffect)
+		{
+			const FVector EffectScale = FVector(Weapon->ParryWarpEffectScale);
+			UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				Hero->GetWorld(),
+				Weapon->ParryWarpEffect,
+				HeroLocBefore,
+				Hero->GetActorRotation(),
+				EffectScale,
+				true,  // bAutoDestroy
+				true,  // bAutoActivate
+				ENCPoolMethod::None
+			);
+			if (NiagaraComp)
+			{
+				NiagaraComp->SetNiagaraVariableLinearColor(TEXT("WarpColor"), Weapon->ParryWarpEffectColor);
+
+				UE_LOG(LogGunParry, Warning,
+					TEXT("[ActivateAbility] %s: 워프 이펙트 스폰: Effect=%s, Location=%s, Scale=%.1f, Color=%s"),
+					bIsServer ? TEXT("SERVER") : TEXT("CLIENT"),
+					*Weapon->ParryWarpEffect->GetName(),
+					*HeroLocBefore.ToString(),
+					Weapon->ParryWarpEffectScale,
+					*Weapon->ParryWarpEffectColor.ToString());
+			}
+		}
+		else
+		{
+			UE_LOG(LogGunParry, Warning,
+				TEXT("[ActivateAbility] %s: 워프 이펙트 없음 (ParryWarpEffect=nullptr)"),
+				bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 		}
 
 		Hero->SetActorLocationAndRotation(WarpLocation, WarpRotation);
