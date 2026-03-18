@@ -750,9 +750,9 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		if (!bWasCancelled && Enemy && bKillProcessed)
 		{
 			FVector KnockbackDir = (Hero->GetActorLocation() - Enemy->GetActorLocation()).GetSafeNormal();
-			KnockbackDir.Z = 0.2f;
+			KnockbackDir.Z = 0.f;
 			KnockbackDir.Normalize();
-			Hero->LaunchCharacter(KnockbackDir * PostParryKnockbackStrength, true, true);
+			Hero->LaunchCharacter(KnockbackDir * PostParryKnockbackStrength, true, false);
 			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 넉백 적용 (%.0f)"), PostParryKnockbackStrength);
 		}
 	}
