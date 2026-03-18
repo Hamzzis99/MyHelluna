@@ -221,7 +221,9 @@ private:
 	// ═══════════════════════════════════════════════════════════
 	FTimerHandle CameraEntryTimerHandle;
 	FRotator TargetCameraEntryRotation = FRotator::ZeroRotator;
-	float CachedCameraEntrySpeed = 8.0f;
+	FRotator StartCameraEntryRotation = FRotator::ZeroRotator;
+	float CachedCameraEntryDuration = 0.3f;
+	float CameraEntryElapsedTime = 0.f;
 	int32 CameraEntryTickCount = 0;
 
 	// ═══════════════════════════════════════════════════════════
