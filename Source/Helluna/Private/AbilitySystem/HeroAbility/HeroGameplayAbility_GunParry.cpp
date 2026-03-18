@@ -25,9 +25,6 @@
 #include "HellunaGameplayTags.h"
 #include "HellunaFunctionLibrary.h"
 #include "DebugHelper.h"
-#include "NiagaraFunctionLibrary.h"
-#include "NiagaraComponent.h"
-
 #include "Kismet/KismetSystemLibrary.h"
 #include "Engine/OverlapResult.h"
 #include "GameMode/HellunaDefenseGameMode.h"
@@ -349,51 +346,37 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			WarpRotation.Roll = 0.f;
 		}
 
-		// ─── 워프 잔상 나이아가라 이펙트 (출발지 + 도착지 동시 스폰) ───
+		// ─── 워프 잔상 나이아가라 이펙트 (Step 2b: Multicast RPC로 모든 클라에서 스폰) ───
 		if (Weapon && Weapon->ParryWarpEffect)
 		{
-			const FVector EffectScale = FVector(Weapon->ParryWarpEffectScale);
-
-			// 출발지 이펙트 (원래 위치에서 사라지는 잔상)
-			UNiagaraComponent* DepartComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-				Hero->GetWorld(),
-				Weapon->ParryWarpEffect,
-				HeroLocBefore,
-				Hero->GetActorRotation(),
-				EffectScale,
-				true, true, ENCPoolMethod::None
-			);
-			if (DepartComp)
+			if (Hero->HasAuthority())
 			{
-				DepartComp->SetNiagaraVariableLinearColor(TEXT("WarpColor"), Weapon->ParryWarpEffectColor);
-			}
+				// 서버에서 Multicast 호출 → 모든 클라이언트에서 VFX 스폰
+				Hero->Multicast_PlayParryWarpVFX(
+					Weapon->ParryWarpEffect,
+					HeroLocBefore,
+					Hero->GetActorRotation(),
+					Weapon->ParryWarpEffectScale,
+					Weapon->ParryWarpEffectColor);
 
-			// 도착지 이펙트 (워프 도착 위치에 등장하는 잔상)
-			UNiagaraComponent* ArriveComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-				Hero->GetWorld(),
-				Weapon->ParryWarpEffect,
-				WarpLocation,
-				WarpRotation,
-				EffectScale,
-				true, true, ENCPoolMethod::None
-			);
-			if (ArriveComp)
-			{
-				ArriveComp->SetNiagaraVariableLinearColor(TEXT("WarpColor"), Weapon->ParryWarpEffectColor);
-			}
+				Hero->Multicast_PlayParryWarpVFX(
+					Weapon->ParryWarpEffect,
+					WarpLocation,
+					WarpRotation,
+					Weapon->ParryWarpEffectScale,
+					Weapon->ParryWarpEffectColor);
 
-			UE_LOG(LogGunParry, Warning,
-				TEXT("[ActivateAbility] %s: 워프 이펙트 스폰: Effect=%s, 출발=%s, 도착=%s, Scale=%.1f"),
-				bIsServer ? TEXT("SERVER") : TEXT("CLIENT"),
-				*Weapon->ParryWarpEffect->GetName(),
-				*HeroLocBefore.ToString(),
-				*WarpLocation.ToString(),
-				Weapon->ParryWarpEffectScale);
+				UE_LOG(LogGunParry, Warning,
+					TEXT("[ActivateAbility] SERVER: Multicast_PlayParryWarpVFX 호출 — Effect=%s, 출발=%s, 도착=%s"),
+					*Weapon->ParryWarpEffect->GetName(),
+					*HeroLocBefore.ToString(),
+					*WarpLocation.ToString());
+			}
 		}
 		else
 		{
-			UE_LOG(LogGunParry, Warning,
-				TEXT("[ActivateAbility] %s: 워프 이펙트 없음 (ParryWarpEffect=nullptr)"),
+			UE_LOG(LogGunParry, Verbose,
+				TEXT("[ActivateAbility] %s: 워프 이펙트 없음 (ParryWarpEffect=nullptr) — Multicast 스킵"),
 				bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 		}
 
@@ -439,31 +422,111 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 	}
 
-	// 몽타주 재생
-	UAnimMontage* ExecutionMontage = Weapon ? Weapon->ParryExecutionMontage : nullptr;
-	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] %s: ExecutionMontage=%s"),
+	// 몽타주 캐싱 + 유효성 검사
+	CachedExecutionMontage = Weapon ? Weapon->ParryExecutionMontage : nullptr;
+	CachedWarpAppearDelay = Weapon ? Weapon->WarpAppearDelay : 0.f;
+
+	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] %s: ExecutionMontage=%s, WarpAppearDelay=%.3f"),
 		bIsServer ? TEXT("SERVER") : TEXT("CLIENT"),
-		ExecutionMontage ? *ExecutionMontage->GetName() : TEXT("NULL"));
+		CachedExecutionMontage ? *CachedExecutionMontage->GetName() : TEXT("NULL"),
+		CachedWarpAppearDelay);
 
-	if (ExecutionMontage)
-	{
-		USkeleton* MontageSkel = ExecutionMontage->GetSkeleton();
-		USkeleton* CharSkel = Hero->GetMesh() && Hero->GetMesh()->GetSkeletalMeshAsset() 
-			? Hero->GetMesh()->GetSkeletalMeshAsset()->GetSkeleton() : nullptr;
-		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] MontageSkel=%s, CharSkel=%s, Match=%s"),
-			MontageSkel ? *MontageSkel->GetName() : TEXT("NULL"),
-			CharSkel ? *CharSkel->GetName() : TEXT("NULL"),
-			(MontageSkel == CharSkel) ? TEXT("YES") : TEXT("NO"));
-		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] MontageGroup=%s, Length=%.2f"),
-			*ExecutionMontage->GetGroupName().ToString(),
-			ExecutionMontage->GetPlayLength());
-	}
-
-	if (!ExecutionMontage)
+	if (!CachedExecutionMontage)
 	{
 		UE_LOG(LogGunParry, Error, TEXT("[ActivateAbility] ExecutionMontage NULL"));
 		if (bIsServer) HandleExecutionFinished(true);
 		return;
+	}
+
+	// 카메라 연출 + 입력 잠금 (딜레이와 무관하게 즉시 적용)
+	BeginCameraEffect(Hero);
+	Hero->LockMoveInput();
+	Hero->LockLookInput();
+
+	// ─── 워프 등장 딜레이 (메시 숨김 → 딜레이 → 메시 등장 + 몽타주) ───
+	if (CachedWarpAppearDelay > 0.f)
+	{
+		// 로컬에서만 메시 숨김 (다른 플레이어에겐 즉시 텔레포트로 보임)
+		if (Hero->IsLocallyControlled())
+		{
+			if (USkeletalMeshComponent* HeroMesh = Hero->GetMesh())
+			{
+				HeroMesh->SetVisibility(false);
+				bMeshHiddenForWarp = true;
+			}
+			UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] CLIENT: 캐릭터 메시 숨김 (WarpAppearDelay=%.3f초)"),
+				CachedWarpAppearDelay);
+		}
+
+		// 딜레이 후 메시 등장 + 몽타주 시작
+		if (UWorld* World = Hero->GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				WarpAppearTimerHandle, this, &ThisClass::OnWarpAppearTimerComplete,
+				CachedWarpAppearDelay, false);
+		}
+	}
+	else
+	{
+		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] WarpAppearDelay=0 — 즉시 몽타주 시작"));
+		BeginExecutionMontage();
+	}
+
+	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 완료 — 카메라+잠금"));
+	UE_LOG(LogGunParry, Warning, TEXT("══════════════════════════════════════════"));
+}
+
+// ═══════════════════════════════════════════════════════════
+// 워프 등장 딜레이 완료 — 메시 보이기 + 몽타주 시작
+// ═══════════════════════════════════════════════════════════
+
+void UHeroGameplayAbility_GunParry::OnWarpAppearTimerComplete()
+{
+	AHellunaHeroCharacter* Hero = GetHeroCharacterFromActorInfo();
+	if (!Hero) return;
+
+	// 메시 보이기 (로컬만)
+	if (bMeshHiddenForWarp && Hero->IsLocallyControlled())
+	{
+		if (USkeletalMeshComponent* HeroMesh = Hero->GetMesh())
+		{
+			HeroMesh->SetVisibility(true);
+		}
+		bMeshHiddenForWarp = false;
+		UE_LOG(LogGunParry, Warning, TEXT("[WarpAppearTimer] CLIENT: 캐릭터 메시 등장 — 딜레이 %.3f초 후"),
+			CachedWarpAppearDelay);
+	}
+
+	BeginExecutionMontage();
+}
+
+// ═══════════════════════════════════════════════════════════
+// 몽타주 생성 및 시작 (딜레이 후 또는 즉시)
+// ═══════════════════════════════════════════════════════════
+
+void UHeroGameplayAbility_GunParry::BeginExecutionMontage()
+{
+	AHellunaHeroCharacter* Hero = GetHeroCharacterFromActorInfo();
+	if (!Hero) return;
+
+	const bool bIsServer = Hero->HasAuthority();
+
+	if (!CachedExecutionMontage)
+	{
+		UE_LOG(LogGunParry, Error, TEXT("[BeginExecutionMontage] ExecutionMontage NULL"));
+		if (bIsServer) HandleExecutionFinished(true);
+		return;
+	}
+
+	if (CachedExecutionMontage)
+	{
+		USkeleton* MontageSkel = CachedExecutionMontage->GetSkeleton();
+		USkeleton* CharSkel = Hero->GetMesh() && Hero->GetMesh()->GetSkeletalMeshAsset()
+			? Hero->GetMesh()->GetSkeletalMeshAsset()->GetSkeleton() : nullptr;
+		UE_LOG(LogGunParry, Warning, TEXT("[BeginExecutionMontage] MontageSkel=%s, CharSkel=%s, Match=%s"),
+			MontageSkel ? *MontageSkel->GetName() : TEXT("NULL"),
+			CharSkel ? *CharSkel->GetName() : TEXT("NULL"),
+			(MontageSkel == CharSkel) ? TEXT("YES") : TEXT("NO"));
 	}
 
 	// [Fix: bug-004-1] 기존 몽타주 강제 중단 (히트 리액션 등)
@@ -474,7 +537,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			UAnimMontage* ActiveMontage = AnimInst->GetCurrentActiveMontage();
 			if (ActiveMontage)
 			{
-				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 기존 몽타주 '%s' 강제 중단"), *ActiveMontage->GetName());
+				UE_LOG(LogGunParry, Warning, TEXT("[BeginExecutionMontage] 기존 몽타주 '%s' 강제 중단"), *ActiveMontage->GetName());
 				AnimInst->StopAllMontages(0.1f);
 			}
 		}
@@ -482,7 +545,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 
 	// [Fix: bug-005] Hero.PlayFullBody=true → ABP가 매 틱 읽어서 전신 몽타주 재생
 	Hero->PlayFullBody = true;
-	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] Hero.PlayFullBody = true"));
+	UE_LOG(LogGunParry, Warning, TEXT("[BeginExecutionMontage] Hero.PlayFullBody = true"));
 
 	ParryFireEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 		this,
@@ -498,14 +561,14 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 	}
 	else
 	{
-		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] WaitGameplayEvent 생성 실패 — EventTag=%s"),
+		UE_LOG(LogGunParry, Warning, TEXT("[BeginExecutionMontage] WaitGameplayEvent 생성 실패 — EventTag=%s"),
 			*HellunaGameplayTags::Event_Parry_Fire.GetTag().ToString());
 	}
 
 	ExecutionMontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, ExecutionMontage, 1.f);
+		this, NAME_None, CachedExecutionMontage, 1.f);
 
-	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] MontageTask 생성=%s"),
+	UE_LOG(LogGunParry, Warning, TEXT("[BeginExecutionMontage] MontageTask 생성=%s"),
 		ExecutionMontageTask ? TEXT("SUCCESS") : TEXT("FAILED"));
 
 	if (ExecutionMontageTask)
@@ -515,16 +578,16 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		ExecutionMontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnExecutionMontageInterrupted);
 		ExecutionMontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnExecutionMontageInterrupted);
 		ExecutionMontageTask->ReadyForActivation();
-		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] MontageTask ReadyForActivation 완료 — Frame=%llu"), GFrameCounter);
+		UE_LOG(LogGunParry, Warning, TEXT("[BeginExecutionMontage] MontageTask ReadyForActivation — Frame=%llu"), GFrameCounter);
 
 		// 비파괴 검증: 몽타주 실제 재생 상태 확인
 		if (UAnimInstance* VerifyAnim = Hero->GetMesh()->GetAnimInstance())
 		{
 			UAnimMontage* ActiveMontage = VerifyAnim->GetCurrentActiveMontage();
-			const bool bIsPlaying = VerifyAnim->Montage_IsPlaying(ExecutionMontage);
-			const float MontagePos = VerifyAnim->Montage_GetPosition(ExecutionMontage);
-			const float PlayRate = VerifyAnim->Montage_GetPlayRate(ExecutionMontage);
-			UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 몽타주 검증: ActiveMontage=%s, IsPlaying=%s, Position=%.3f, PlayRate=%.2f"),
+			const bool bIsPlaying = VerifyAnim->Montage_IsPlaying(CachedExecutionMontage);
+			const float MontagePos = VerifyAnim->Montage_GetPosition(CachedExecutionMontage);
+			const float PlayRate = VerifyAnim->Montage_GetPlayRate(CachedExecutionMontage);
+			UE_LOG(LogGunParry, Warning, TEXT("[BeginExecutionMontage] 몽타주 검증: ActiveMontage=%s, IsPlaying=%s, Position=%.3f, PlayRate=%.2f"),
 				ActiveMontage ? *ActiveMontage->GetName() : TEXT("없음"),
 				bIsPlaying ? TEXT("YES") : TEXT("NO"),
 				MontagePos, PlayRate);
@@ -532,19 +595,9 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 	}
 	else
 	{
-		UE_LOG(LogGunParry, Error, TEXT("[ActivateAbility] MontageTask 생성 실패"));
+		UE_LOG(LogGunParry, Error, TEXT("[BeginExecutionMontage] MontageTask 생성 실패"));
 		if (bIsServer) HandleExecutionFinished(true);
-		return;
 	}
-
-	// 카메라 연출 (로컬만)
-	BeginCameraEffect(Hero);
-
-	// 이동/시점 잠금
-	Hero->LockMoveInput();
-	Hero->LockLookInput();
-	UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 완료 — 카메라+잠금"));
-	UE_LOG(LogGunParry, Warning, TEXT("══════════════════════════════════════════"));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -609,6 +662,12 @@ void UHeroGameplayAbility_GunParry::OnParryExecutionFireEvent(FGameplayEventData
 	if (!Hero || bKillProcessed)
 	{
 		return;
+	}
+
+	// VFX 중단 — 총 발사 타이밍에 잔상 소멸 시작
+	if (Hero->HasAuthority())
+	{
+		Hero->Multicast_StopParryWarpVFX();
 	}
 
 	PlayParryExecutionCameraShake(Hero);
@@ -869,10 +928,35 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 		HandleExecutionFinished(false);
 	}
 
+	// 워프 등장 딜레이 안전 원복 — GA 취소/종료 시 메시 반드시 복원
+	if (WarpAppearTimerHandle.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(WarpAppearTimerHandle);
+		}
+	}
+	if (bMeshHiddenForWarp)
+	{
+		if (ActorInfo && ActorInfo->AvatarActor.IsValid())
+		{
+			if (AHellunaHeroCharacter* Hero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get()))
+			{
+				if (USkeletalMeshComponent* HeroMesh = Hero->GetMesh())
+				{
+					HeroMesh->SetVisibility(true);
+				}
+			}
+		}
+		bMeshHiddenForWarp = false;
+		UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] 캐릭터 메시 Visibility 안전 원복"));
+	}
+
 	bHandleExecutionFinishedCalled = false;
 	bKillProcessed = false;
 	ExecutionMontageTask = nullptr;
 	ParryFireEventTask = nullptr;
+	CachedExecutionMontage = nullptr;
 
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }

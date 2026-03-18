@@ -36,6 +36,8 @@
 
 #include "DebugHelper.h"
 #include "Helluna.h"  // [Step3] HELLUNA_DEBUG_HERO 매크로 (EndPlay/Input/Weapon/Repair 디버그 로그)
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 #include "AbilitySystem/HeroAbility/HeroGameplayAbility_GunParry.h"
 #include "Animation/AnimInstance.h"
 #include "Character/EnemyComponent/HellunaHealthComponent.h"
@@ -1114,4 +1116,70 @@ void AHellunaHeroCharacter::Multicast_PlayHeroDeath_Implementation()
 	if (!AnimInst) return;
 
 	AnimInst->Montage_Play(DeathMontage);
+}
+
+// =========================================================
+// ★ 건패링 워프 VFX 멀티캐스트 (Step 2b)
+// 서버에서 호출 → 모든 클라이언트에서 나이아가라 이펙트 스폰
+// =========================================================
+void AHellunaHeroCharacter::Multicast_PlayParryWarpVFX_Implementation(
+	UNiagaraSystem* Effect, FVector Location, FRotator Rotation, float Scale, FLinearColor Color)
+{
+	if (!Effect)
+	{
+		return;
+	}
+
+	// 데디케이티드 서버에서는 렌더링 불필요 — 스킵
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	UNiagaraComponent* Comp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		GetWorld(),
+		Effect,
+		Location,
+		Rotation,
+		FVector(Scale),
+		true,  // bAutoDestroy
+		true,  // bAutoActivate
+		ENCPoolMethod::None
+	);
+
+	if (Comp)
+	{
+		Comp->SetNiagaraVariableLinearColor(TEXT("WarpColor"), Color);
+		ActiveParryVFX.Add(Comp);
+	}
+
+	UE_LOG(LogGunParry, Verbose,
+		TEXT("[Multicast_PlayParryWarpVFX] VFX 스폰 — Effect=%s, Location=%s, Scale=%.1f"),
+		*Effect->GetName(),
+		*Location.ToString(),
+		Scale);
+}
+
+// =========================================================
+// ★ 건패링 워프 VFX 중단 (Step 2b-5)
+// AN_ParryExecutionFire 타이밍에 호출 → 기존 파티클만 페이드아웃
+// =========================================================
+void AHellunaHeroCharacter::Multicast_StopParryWarpVFX_Implementation()
+{
+	int32 DeactivatedCount = 0;
+
+	for (TWeakObjectPtr<UNiagaraComponent>& WeakComp : ActiveParryVFX)
+	{
+		if (UNiagaraComponent* Comp = WeakComp.Get())
+		{
+			Comp->Deactivate();
+			++DeactivatedCount;
+		}
+	}
+
+	UE_LOG(LogGunParry, Verbose,
+		TEXT("[Multicast_StopParryWarpVFX] VFX Deactivate — %d개 컴포넌트"),
+		DeactivatedCount);
+
+	ActiveParryVFX.Empty();
 }

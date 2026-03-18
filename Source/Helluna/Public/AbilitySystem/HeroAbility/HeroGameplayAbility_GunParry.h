@@ -159,6 +159,12 @@ private:
 	/** 카메라 연출 종료 (로컬만) */
 	void EndCameraEffect(AHellunaHeroCharacter* Hero);
 
+	/** 워프 등장 딜레이 완료 — 메시 보이기 + 몽타주 시작 */
+	void OnWarpAppearTimerComplete();
+
+	/** 몽타주 생성 및 시작 (딜레이 후 또는 즉시) */
+	void BeginExecutionMontage();
+
 	// ═══════════════════════════════════════════════════════════
 	// 런타임 상태
 	// ═══════════════════════════════════════════════════════════
@@ -209,4 +215,15 @@ private:
 	/** ControlRotation/bUseControllerRotationYaw 저장 (카메라 정면 배치용) */
 	float SavedControlRotationYaw = 0.f;
 	bool bSavedUseControllerRotationYaw = true;
+
+	// ═══════════════════════════════════════════════════════════
+	// 워프 등장 딜레이
+	// ═══════════════════════════════════════════════════════════
+	FTimerHandle WarpAppearTimerHandle;
+	float CachedWarpAppearDelay = 0.f;
+	bool bMeshHiddenForWarp = false;
+
+	/** 캐싱한 처형 몽타주 (BeginExecutionMontage에서 사용) */
+	UPROPERTY()
+	TObjectPtr<UAnimMontage> CachedExecutionMontage = nullptr;
 };

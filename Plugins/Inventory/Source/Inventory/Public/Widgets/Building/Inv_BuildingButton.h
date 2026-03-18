@@ -13,6 +13,18 @@ class UTextBlock;
 class UHorizontalBox;
 
 /**
+ * 건물 분류 카테고리
+ * 빌드 메뉴의 지원 / 보조 / 건설 탭에 대응
+ */
+UENUM(BlueprintType)
+enum class EBuildCategory : uint8
+{
+	Support       UMETA(DisplayName = "지원"),
+	Auxiliary     UMETA(DisplayName = "보조"),
+	Construction  UMETA(DisplayName = "건설"),
+};
+
+/**
  * 빌드 메뉴에서 개별 건물 선택 버튼 위젯
  * 블루프린트에서 UI 디자인 후 이 클래스를 상속받아 사용
  */
@@ -109,8 +121,15 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> Text_Material3Amount;
 
+	// === 건물 분류 ===
+
+	// 이 건물이 속할 탭 (지원/보조/건설)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "건설", meta = (AllowPrivateAccess = "true",
+		DisplayName = "건물 분류", Tooltip = "이 건물이 속할 탭. 지원/보조/건설 중 선택."))
+	EBuildCategory BuildCategory = EBuildCategory::Construction;
+
 	// === 건물 정보 (블루프린트에서 설정 가능) ===
-	
+
 	// 건물 이름
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "건설", meta = (AllowPrivateAccess = "true",
 		DisplayName = "건물 이름", Tooltip = "빌드 메뉴에 표시될 건물의 이름입니다."))

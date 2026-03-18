@@ -214,6 +214,12 @@ public:
 			ToolTip = "워프 잔상 이펙트 색상. 무기별로 다른 색 가능. 기본=SF 파란색."))
 	FLinearColor ParryWarpEffectColor = FLinearColor(0.2f, 0.5f, 1.0f, 1.0f);
 
+	/** 워프 후 캐릭터가 도착지에 나타나기까지 딜레이(초). 0이면 즉시 나타남. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "워프 등장 딜레이(초)", ClampMin = "0.0", ClampMax = "0.5",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "워프 후 캐릭터가 도착지에 나타나기까지 딜레이(초). 0이면 즉시 나타남. 0.05=순간이동 잔상 느낌, 0.1=확실한 순간이동 느낌. 권총=0.05 추천."))
+	float WarpAppearDelay = 0.05f;
 
 protected:
 
