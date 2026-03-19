@@ -86,8 +86,11 @@ public:
 	// 빌드 메뉴 닫기 (외부에서 호출 가능 - 인벤토리 닫을 때 사용)
 	void CloseBuildMenu();
 
+	// 빌드 모드(고스트 액터) 강제 종료 (다른 위젯이 열릴 때 사용)
+	void ForceEndBuildMode();
+
 	// 빌드 메뉴 열림 여부 (CraftingStation의 ForceCloseMenu에서 사용)
-	bool IsBuildMenuOpen() const { return IsValid(BuildMenuInstance); }
+	bool IsBuildMenuOpen() const { return BuildMenuInstance != nullptr; }
 
 private:
 	// 빌드 모드 시작/종료 함수

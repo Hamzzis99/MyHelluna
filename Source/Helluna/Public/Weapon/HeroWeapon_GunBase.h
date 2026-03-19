@@ -239,6 +239,38 @@ public:
 			ToolTip = "고스트 메시 초기 투명도. 0=완전 투명, 1=불투명. 나이아가라에서 수명에 따라 페이드아웃."))
 	float ParryWarpGhostOpacity = 0.5f;
 
+	// ═══════════════════════════════════════════════════════════
+	// 건패링 잔상 (Ghost Trail / After Image)
+	// ═══════════════════════════════════════════════════════════
+
+	/** 패링 워프 시 캐릭터 잔상(After Image) 표시 여부 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "잔상 표시",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "패링 워프 시 캐릭터 잔상(After Image) 표시 여부. 로컬에서만 렌더링."))
+	bool bParryGhostTrail = true;
+
+	/** 잔상 개수. 3=가볍게, 5=화려하게 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "잔상 개수", ClampMin = "1", ClampMax = "8",
+			EditCondition = "bCanParry && bParryGhostTrail", EditConditionHides,
+			ToolTip = "잔상 개수. 3=가볍게, 5=화려하게. 출발지~경로 30% 구간에 배치."))
+	int32 ParryGhostTrailCount = 3;
+
+	/** 잔상이 완전히 사라지는 데 걸리는 시간(초) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "잔상 페이드 시간(초)", ClampMin = "0.1", ClampMax = "2.0",
+			EditCondition = "bCanParry && bParryGhostTrail", EditConditionHides,
+			ToolTip = "잔상이 완전히 사라지는 데 걸리는 시간(초). 0.5=빠른 소멸, 1.0=여유."))
+	float ParryGhostTrailFadeDuration = 0.5f;
+
+	/** 잔상 머티리얼. nullptr이면 M_GhostTrail 사용 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
+		meta = (DisplayName = "잔상 머티리얼",
+			EditCondition = "bCanParry && bParryGhostTrail", EditConditionHides,
+			ToolTip = "잔상 머티리얼(Translucent, Unlit). nullptr이면 /Game/Gihyeon/Combat/Materials/M_GhostTrail 사용."))
+	TObjectPtr<UMaterialInterface> ParryGhostTrailMaterial = nullptr;
+
 	/** 워프 후 캐릭터가 도착지에 나타나기까지 딜레이(초). 0이면 즉시 나타남. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry",
 		meta = (DisplayName = "워프 등장 딜레이(초)", ClampMin = "0.0", ClampMax = "0.5",

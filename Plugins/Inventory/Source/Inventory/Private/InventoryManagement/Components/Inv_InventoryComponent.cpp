@@ -2613,13 +2613,14 @@ void UInv_InventoryComponent::CloseOtherMenus()
 {
 	if (!OwningController.IsValid() || !GetWorld()) return;
 
-	// BuildMenu 닫기
+	// BuildMode(고스트 액터) + BuildMenu 닫기
 	UInv_BuildingComponent* BuildingComp = OwningController->FindComponentByClass<UInv_BuildingComponent>();
 	if (IsValid(BuildingComp))
 	{
+		BuildingComp->ForceEndBuildMode();
 		BuildingComp->CloseBuildMenu();
 #if INV_DEBUG_INVENTORY
-		UE_LOG(LogTemp, Log, TEXT("CloseOtherMenus: BuildMenu 닫힘"));
+		UE_LOG(LogTemp, Log, TEXT("CloseOtherMenus: BuildMode/BuildMenu 닫힘"));
 #endif
 	}
 

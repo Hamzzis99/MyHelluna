@@ -386,6 +386,27 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 				bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 		}
 
+		// ─── Ghost Trail 잔상 스폰 (Multicast — 모든 클라에서 스폰, 워프 직전) ───
+		if (Weapon && Weapon->bParryGhostTrail && Hero->HasAuthority())
+		{
+			Hero->Multicast_SpawnParryGhostTrail(
+				Weapon->ParryGhostTrailCount,
+				Weapon->ParryGhostTrailFadeDuration,
+				WarpLocation,       // 도착지 (잔상 기준점)
+				HeroLocBefore,      // 출발지 (잔상 방향)
+				Hero->GetActorRotation(),
+				Weapon->ParryWarpEffectColor,
+				Weapon->ParryGhostTrailMaterial);
+
+			UE_LOG(LogGunParry, Warning,
+				TEXT("[GhostTrail] SERVER: Multicast_SpawnParryGhostTrail 호출 — Count=%d, FadeDuration=%.1f"),
+				Weapon->ParryGhostTrailCount, Weapon->ParryGhostTrailFadeDuration);
+		}
+		else if (Weapon && !Weapon->bParryGhostTrail)
+		{
+			UE_LOG(LogGunParry, Verbose, TEXT("[GhostTrail] bParryGhostTrail=false — 잔상 스킵"));
+		}
+
 		Hero->SetActorLocationAndRotation(WarpLocation, WarpRotation);
 
 		// [Fix: collision] 처형 중 캐릭터 충돌 비활성화 — 적과 겹침 방지

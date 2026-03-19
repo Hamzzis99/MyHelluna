@@ -377,6 +377,14 @@ void UInv_BuildingComponent::CloseBuildMenu()
 #endif
 }
 
+void UInv_BuildingComponent::ForceEndBuildMode()
+{
+	if (bIsInBuildMode)
+	{
+		EndBuildMode();
+	}
+}
+
 void UInv_BuildingComponent::CloseCraftingMenuIfOpen()
 {
 	if (!OwningPC.IsValid() || !GetWorld()) return;

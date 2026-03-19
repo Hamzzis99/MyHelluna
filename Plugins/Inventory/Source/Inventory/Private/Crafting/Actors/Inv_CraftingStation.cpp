@@ -65,6 +65,7 @@ void AInv_CraftingStation::OnInteract_Implementation(APlayerController* PlayerCo
 	UInv_BuildingComponent* BuildComp = PlayerController->FindComponentByClass<UInv_BuildingComponent>();
 	if (IsValid(BuildComp))
 	{
+		BuildComp->ForceEndBuildMode();
 		BuildComp->CloseBuildMenu();
 	}
 
@@ -149,7 +150,7 @@ void AInv_CraftingStation::CheckDistanceToPlayer(APlayerController* PC)
 #if INV_DEBUG_CRAFT
 		UE_LOG(LogTemp, Log, TEXT("메뉴가 이미 닫혔음. Timer 정지. (Player: %s)"), *PC->GetName());
 #endif
-		
+
 		// Timer 정지
 		if (PlayerTimerMap.Contains(PC))
 		{
@@ -157,6 +158,19 @@ void AInv_CraftingStation::CheckDistanceToPlayer(APlayerController* PC)
 			PlayerTimerMap.Remove(PC);
 		}
 		return;
+	}
+
+	// 방안 B: 위젯이 뷰포트에서 이미 제거된 경우 (다른 시스템이 닫은 경우) stale 엔트리 정리
+	{
+		UUserWidget* Menu = PlayerMenuMap[PC];
+		if (!IsValid(Menu) || !Menu->IsInViewport())
+		{
+#if INV_DEBUG_CRAFT
+			UE_LOG(LogTemp, Log, TEXT("크래프팅 메뉴가 외부에서 제거됨. stale 엔트리 정리. (Player: %s)"), *PC->GetName());
+#endif
+			ForceCloseMenu(PC);
+			return;
+		}
 	}
 
 	// PlayerController의 Pawn 가져오기

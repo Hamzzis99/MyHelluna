@@ -39,6 +39,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 #include "AbilitySystem/HeroAbility/HeroGameplayAbility_GunParry.h"
+#include "VFX/GhostTrailActor.h"
 #include "Animation/AnimInstance.h"
 #include "Character/EnemyComponent/HellunaHealthComponent.h"
 
@@ -860,6 +861,7 @@ void AHellunaHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 
 	DOREPLIFETIME(AHellunaHeroCharacter, CurrentWeapon);  // OnRep_CurrentWeapon → HUD 갱신
 	DOREPLIFETIME(AHellunaHeroCharacter, CurrentWeaponTag);
+	DOREPLIFETIME(AHellunaHeroCharacter, PlayFullBody);   // 전신 몽타주 플래그 — CLIENT B ABP 동기화
 }
 
 
@@ -1200,4 +1202,51 @@ void AHellunaHeroCharacter::Multicast_StopParryWarpVFX_Implementation()
 		DeactivatedCount);
 
 	ActiveParryVFX.Empty();
+}
+
+// =========================================================
+// Multicast_SpawnParryGhostTrail — 패링 잔상(PoseableMesh) 전 클라이언트 스폰
+// =========================================================
+void AHellunaHeroCharacter::Multicast_SpawnParryGhostTrail_Implementation(
+	int32 Count, float FadeDuration,
+	FVector StartLocation, FVector EndLocation, FRotator TrailRotation,
+	FLinearColor GhostColor, UMaterialInterface* TrailMaterial)
+{
+	// 데디케이티드 서버에서는 렌더링 불필요
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	USkeletalMeshComponent* HeroMesh = GetMesh();
+	if (!HeroMesh || !HeroMesh->GetSkeletalMeshAsset()) return;
+
+	// 머티리얼 폴백
+	UMaterialInterface* Mat = TrailMaterial;
+	if (!Mat)
+	{
+		Mat = LoadObject<UMaterialInterface>(nullptr,
+			TEXT("/Game/Gihyeon/Combat/Materials/M_GhostTrail"));
+	}
+	if (!Mat) return;
+
+	for (int32 i = 0; i < Count; i++)
+	{
+		const float Alpha = (float)(i + 1) / (float)(Count + 1);
+		// 도착지(StartLocation)에서 출발지(EndLocation) 방향으로 잔상 배치 — 카메라 시야 안에 들어옴
+		const FVector TrailLoc = FMath::Lerp(StartLocation, EndLocation, Alpha * 0.5f);
+		const float OpacityMul = 1.f - Alpha * 0.5f;
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		AGhostTrailActor* Ghost = GetWorld()->SpawnActor<AGhostTrailActor>(
+			AGhostTrailActor::StaticClass(), TrailLoc, TrailRotation, SpawnParams);
+
+		if (Ghost)
+		{
+			Ghost->Initialize(HeroMesh, Mat, FadeDuration, 0.6f * OpacityMul, GhostColor);
+		}
+	}
+
+	UE_LOG(LogGunParry, Warning,
+		TEXT("[Multicast_SpawnParryGhostTrail] 잔상 %d개 스폰 — Start=%s, FadeDuration=%.1f"),
+		Count, *StartLocation.ToString(), FadeDuration);
 }
