@@ -110,7 +110,7 @@ void UInv_TabbedCraftingEntry::RefreshMaterialUI()
 	{
 		if (IsValid(HorizontalBox_Material1))
 		{
-			HorizontalBox_Material1->SetVisibility(ESlateVisibility::Hidden);
+			HorizontalBox_Material1->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 
@@ -145,7 +145,7 @@ void UInv_TabbedCraftingEntry::RefreshMaterialUI()
 	{
 		if (IsValid(HorizontalBox_Material2))
 		{
-			HorizontalBox_Material2->SetVisibility(ESlateVisibility::Hidden);
+			HorizontalBox_Material2->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 
@@ -180,7 +180,7 @@ void UInv_TabbedCraftingEntry::RefreshMaterialUI()
 	{
 		if (IsValid(HorizontalBox_Material3))
 		{
-			HorizontalBox_Material3->SetVisibility(ESlateVisibility::Hidden);
+			HorizontalBox_Material3->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 
