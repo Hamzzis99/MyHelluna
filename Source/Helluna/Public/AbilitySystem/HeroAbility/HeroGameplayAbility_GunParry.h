@@ -290,4 +290,25 @@ private:
 
 	/** 다이나믹 VFX가 현재 활성 상태인지 (중복 호출/원복 추적) */
 	bool bDynamicVFXActive = false;
+
+	// ═══════════════════════════════════════════════════════════
+	// 시네마틱 카메라 — DOF + 오빗
+	// ═══════════════════════════════════════════════════════════
+	FTimerHandle DOFTransitionTimerHandle;
+	FTimerHandle OrbitTimerHandle;
+
+	// DOF
+	float CachedDOFFstop = 1.4f;
+	float CachedDOFTransitionDuration = 0.3f;
+	float DOFTransitionElapsed = 0.f;
+	bool bDOFActive = false;
+	bool bDOFFadingOut = false;
+	float DOFStartFstop = 0.f;   // 페이드 시작 시점의 Fstop (fade-in: 큰값→목표, fade-out: 목표→큰값)
+
+	// 오빗
+	float CachedOrbitSpeed = 10.f;
+	float CachedOrbitTotalAngle = 15.f;
+	float OrbitElapsed = 0.f;
+	float OrbitBaseYaw = 0.f;    // 오빗 시작 시점의 Yaw
+	bool bOrbitActive = false;
 };

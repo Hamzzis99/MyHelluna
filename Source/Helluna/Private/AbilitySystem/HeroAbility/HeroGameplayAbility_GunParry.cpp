@@ -329,6 +329,12 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		CachedKillDesaturation = Weapon->KillDesaturation;
 		CachedKillPPFadeDuration = Weapon->KillPostProcessFadeDuration;
 
+		// Cinematic 캐싱
+		CachedDOFFstop = Weapon->ExecutionDOFFstop;
+		CachedDOFTransitionDuration = Weapon->ExecutionDOFTransitionDuration;
+		CachedOrbitSpeed = Weapon->ExecutionOrbitSpeed;
+		CachedOrbitTotalAngle = Weapon->ExecutionOrbitTotalAngle;
+
 		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 무기 카메라 설정: Weapon=%s, ArmMul=%.2f, FOVMul=%.2f, YawOffset=%.1f, WarpAngle=%.1f, ExecDist=%.0f, Shake=%s, ShakeScale=%.1f"),
 			*Weapon->GetName(), CachedArmLengthMul, CachedFOVMul, CachedYawOffset, CachedWarpAngleOffset, CachedExecutionDistance,
 			CachedParryExecutionCameraShake ? *CachedParryExecutionCameraShake->GetName() : TEXT("None"),
@@ -509,6 +515,47 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 
 									UE_LOG(LogGunParry, Warning, TEXT("[CameraEntry] 완료 — Yaw=%.1f (%.2f초, %d프레임)"),
 										TargetCameraEntryRotation.Yaw, CameraEntryElapsedTime, CameraEntryTickCount);
+
+									// 카메라 진입 완료 → 슬로우 오빗 시작
+									if (CachedOrbitSpeed > 0.f && CachedOrbitTotalAngle > 0.f)
+									{
+										OrbitElapsed = 0.f;
+										OrbitBaseYaw = TargetCameraEntryRotation.Yaw;
+										bOrbitActive = true;
+
+										if (UWorld* OW = LambdaHero->GetWorld())
+										{
+											constexpr float OrbitTickRate = 0.016f;
+											OW->GetTimerManager().SetTimer(
+												OrbitTimerHandle,
+												FTimerDelegate::CreateWeakLambda(this, [this, OrbitTickRate]()
+												{
+													AHellunaHeroCharacter* OH = Cast<AHellunaHeroCharacter>(GetAvatarActorFromActorInfo());
+													if (!OH || !bOrbitActive) return;
+													APlayerController* OPC = Cast<APlayerController>(OH->GetController());
+													if (!OPC) return;
+
+													OrbitElapsed += OrbitTickRate;
+													const float OrbitYaw = FMath::Min(OrbitElapsed * CachedOrbitSpeed, CachedOrbitTotalAngle);
+
+													FRotator Ctrl = OPC->GetControlRotation();
+													Ctrl.Yaw = OrbitBaseYaw + OrbitYaw;
+													OPC->SetControlRotation(Ctrl);
+
+													if (OrbitYaw >= CachedOrbitTotalAngle)
+													{
+														if (UWorld* OW2 = OH->GetWorld())
+														{
+															OW2->GetTimerManager().ClearTimer(OrbitTimerHandle);
+														}
+														UE_LOG(LogGunParry, Warning, TEXT("[Orbit] 완료 — 총 %.1f도 회전"), CachedOrbitTotalAngle);
+													}
+												}),
+												OrbitTickRate, true);
+										}
+										UE_LOG(LogGunParry, Warning, TEXT("[Orbit] 시작 — Speed=%.1f도/초, Max=%.1f도, BaseYaw=%.1f"),
+											CachedOrbitSpeed, CachedOrbitTotalAngle, OrbitBaseYaw);
+									}
 								}
 							}),
 							EntryTickRate, true);
@@ -1140,6 +1187,8 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 			World->GetTimerManager().ClearTimer(WarpCameraLagRestoreTimerHandle);
 			World->GetTimerManager().ClearTimer(KillFOVPunchRestoreTimerHandle);
 			World->GetTimerManager().ClearTimer(KillPostProcessFadeTimerHandle);
+			World->GetTimerManager().ClearTimer(DOFTransitionTimerHandle);
+			World->GetTimerManager().ClearTimer(OrbitTimerHandle);
 		}
 		if (ActorInfo && ActorInfo->AvatarActor.IsValid())
 		{
@@ -1667,6 +1716,87 @@ void UHeroGameplayAbility_GunParry::BeginWarpVFX(AHellunaHeroCharacter* Hero)
 		}
 	}
 
+	// DOF — 처형 중 배경 흐림 (피사계심도)
+	if (CachedDOFFstop > 0.f)
+	{
+		Camera->PostProcessBlendWeight = 1.0f;
+		Camera->PostProcessSettings.bOverride_DepthOfFieldFstop = true;
+		Camera->PostProcessSettings.bOverride_DepthOfFieldFocalDistance = true;
+
+		// 초점 거리: 적과 히어로 중간 지점까지의 거리
+		float FocalDist = 200.f; // 기본값
+		if (ParryTarget)
+		{
+			const FVector MidPoint = (Hero->GetActorLocation() + ParryTarget->GetActorLocation()) * 0.5f;
+			if (UCameraComponent* Cam = Hero->GetFollowCamera())
+			{
+				FocalDist = FVector::Dist(Cam->GetComponentLocation(), MidPoint);
+			}
+		}
+		Camera->PostProcessSettings.DepthOfFieldFocalDistance = FocalDist;
+
+		// Fade-in: 큰 Fstop(선명) → 작은 Fstop(흐림) 전환
+		Camera->PostProcessSettings.DepthOfFieldFstop = 22.f; // 시작: 완전 선명
+		bDOFActive = true;
+		bDOFFadingOut = false;
+		DOFTransitionElapsed = 0.f;
+
+		if (UWorld* World = Hero->GetWorld())
+		{
+			constexpr float TickRate = 0.016f;
+			const float TargetFstop = CachedDOFFstop;
+			const float TransDuration = CachedDOFTransitionDuration;
+
+			World->GetTimerManager().SetTimer(
+				DOFTransitionTimerHandle,
+				FTimerDelegate::CreateWeakLambda(this, [this, TickRate, TargetFstop, TransDuration]()
+				{
+					DOFTransitionElapsed += TickRate;
+					const float Alpha = FMath::Clamp(DOFTransitionElapsed / TransDuration, 0.f, 1.f);
+
+					AHellunaHeroCharacter* H = Cast<AHellunaHeroCharacter>(GetAvatarActorFromActorInfo());
+					if (!H) return;
+					UCameraComponent* C = H->GetFollowCamera();
+					if (!C) return;
+
+					if (!bDOFFadingOut)
+					{
+						// Fade-in: 22 → TargetFstop
+						C->PostProcessSettings.DepthOfFieldFstop = FMath::Lerp(22.f, TargetFstop, Alpha);
+					}
+					else
+					{
+						// Fade-out: TargetFstop → 22
+						C->PostProcessSettings.DepthOfFieldFstop = FMath::Lerp(DOFStartFstop, 22.f, Alpha);
+					}
+
+					if (Alpha >= 1.f)
+					{
+						if (bDOFFadingOut)
+						{
+							// 페이드아웃 완료 — DOF 해제
+							C->PostProcessSettings.bOverride_DepthOfFieldFstop = false;
+							C->PostProcessSettings.bOverride_DepthOfFieldFocalDistance = false;
+							bDOFActive = false;
+							UE_LOG(LogGunParry, Warning, TEXT("[DOF] 페이드아웃 완료 — DOF 해제"));
+						}
+						else
+						{
+							UE_LOG(LogGunParry, Warning, TEXT("[DOF] 페이드인 완료 — Fstop=%.1f"), TargetFstop);
+						}
+						if (UWorld* W = H->GetWorld())
+						{
+							W->GetTimerManager().ClearTimer(DOFTransitionTimerHandle);
+						}
+					}
+				}),
+				TickRate, true);
+		}
+
+		UE_LOG(LogGunParry, Warning, TEXT("[DOF] 시작 — Fstop=%.1f, FocalDist=%.0f, TransDuration=%.2f"),
+			CachedDOFFstop, FocalDist, CachedDOFTransitionDuration);
+	}
+
 	UE_LOG(LogGunParry, Warning, TEXT("[WarpVFX] 시작 — FOV=%.0f→%.0f, ChromaticAberration=%.1f, CameraLag=%.1f"),
 		SavedFOV, CachedWarpFOVBurst, CachedWarpChromaticAberration, CachedWarpCameraLagSpeed);
 }
@@ -1811,6 +1941,68 @@ void UHeroGameplayAbility_GunParry::EndKillVFX(AHellunaHeroCharacter* Hero)
 		Camera->PostProcessSettings.ColorSaturation = FVector4(1, 1, 1, 1);
 	}
 
+	// DOF 페이드아웃 시작
+	if (bDOFActive && !bDOFFadingOut)
+	{
+		UCameraComponent* Camera = Hero->GetFollowCamera();
+		if (Camera)
+		{
+			bDOFFadingOut = true;
+			DOFTransitionElapsed = 0.f;
+			DOFStartFstop = Camera->PostProcessSettings.DepthOfFieldFstop;
+
+			// 기존 DOF 타이머 클리어 후 페이드아웃 타이머 재시작
+			if (UWorld* World = Hero->GetWorld())
+			{
+				World->GetTimerManager().ClearTimer(DOFTransitionTimerHandle);
+
+				constexpr float TickRate = 0.016f;
+				const float TransDuration = CachedDOFTransitionDuration;
+
+				World->GetTimerManager().SetTimer(
+					DOFTransitionTimerHandle,
+					FTimerDelegate::CreateWeakLambda(this, [this, TickRate, TransDuration]()
+					{
+						DOFTransitionElapsed += TickRate;
+						const float Alpha = FMath::Clamp(DOFTransitionElapsed / TransDuration, 0.f, 1.f);
+
+						AHellunaHeroCharacter* H = Cast<AHellunaHeroCharacter>(GetAvatarActorFromActorInfo());
+						if (!H) return;
+						UCameraComponent* C = H->GetFollowCamera();
+						if (!C) return;
+
+						C->PostProcessSettings.DepthOfFieldFstop = FMath::Lerp(DOFStartFstop, 22.f, Alpha);
+
+						if (Alpha >= 1.f)
+						{
+							C->PostProcessSettings.bOverride_DepthOfFieldFstop = false;
+							C->PostProcessSettings.bOverride_DepthOfFieldFocalDistance = false;
+							bDOFActive = false;
+							bDOFFadingOut = false;
+							if (UWorld* W = H->GetWorld())
+							{
+								W->GetTimerManager().ClearTimer(DOFTransitionTimerHandle);
+							}
+							UE_LOG(LogGunParry, Warning, TEXT("[DOF] 페이드아웃 완료 — DOF 해제"));
+						}
+					}),
+					TickRate, true);
+			}
+			UE_LOG(LogGunParry, Warning, TEXT("[DOF] 페이드아웃 시작 — 현재 Fstop=%.1f"), DOFStartFstop);
+		}
+	}
+
+	// 오빗 정지
+	if (bOrbitActive)
+	{
+		bOrbitActive = false;
+		if (UWorld* World = Hero->GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(OrbitTimerHandle);
+		}
+		UE_LOG(LogGunParry, Warning, TEXT("[Orbit] 정지 — 처형 종료"));
+	}
+
 	UE_LOG(LogGunParry, Warning, TEXT("[KillVFX] EndKillVFX — PostProcess override 리셋"));
 }
 
@@ -1827,6 +2019,11 @@ void UHeroGameplayAbility_GunParry::ResetAllDynamicVFX(AHellunaHeroCharacter* He
 		Camera->PostProcessSettings.VignetteIntensity = 0.f;
 		Camera->PostProcessSettings.bOverride_ColorSaturation = false;
 		Camera->PostProcessSettings.ColorSaturation = FVector4(1, 1, 1, 1);
+
+		// DOF 원복
+		Camera->PostProcessSettings.bOverride_DepthOfFieldFstop = false;
+		Camera->PostProcessSettings.bOverride_DepthOfFieldFocalDistance = false;
+
 		Camera->PostProcessBlendWeight = SavedPostProcessBlendWeight;
 	}
 
@@ -1836,4 +2033,9 @@ void UHeroGameplayAbility_GunParry::ResetAllDynamicVFX(AHellunaHeroCharacter* He
 		Boom->bEnableCameraLag = bSavedEnableCameraLag;
 		Boom->CameraLagSpeed = SavedCameraLagSpeed;
 	}
+
+	// 오빗 정지
+	bOrbitActive = false;
+	bDOFActive = false;
+	bDOFFadingOut = false;
 }

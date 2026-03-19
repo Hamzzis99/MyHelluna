@@ -359,6 +359,38 @@ public:
 			ToolTip = "킬 포스트프로세스 효과가 원복되는 시간(초). 0.5=자연스러움."))
 	float KillPostProcessFadeDuration = 0.5f;
 
+	// ═══════════════════════════════════════════════════════════
+	// 건패링 시네마틱 카메라 (DOF + 오빗)
+	// ═══════════════════════════════════════════════════════════
+
+	/** 처형 중 피사계심도 조리개값 (낮을수록 배경 흐림). 0이면 비활성. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Cinematic",
+		meta = (DisplayName = "처형 DOF 조리개(F-stop)", ClampMin = "0.0", ClampMax = "22.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 중 피사계심도(DOF) 조리개값. 낮을수록 배경이 흐려짐. 0이면 비활성. 1.4=영화급 얕은 DOF, 4.0=은은한 DOF."))
+	float ExecutionDOFFstop = 1.4f;
+
+	/** DOF 전환(시작/종료) 시간(초) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Cinematic",
+		meta = (DisplayName = "DOF 전환 시간(초)", ClampMin = "0.05", ClampMax = "1.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "DOF가 적용/해제되는 데 걸리는 전환 시간. 0.3=자연스러움."))
+	float ExecutionDOFTransitionDuration = 0.3f;
+
+	/** 처형 중 카메라 오빗 속도 (도/초). 0이면 비활성. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Cinematic",
+		meta = (DisplayName = "처형 오빗 속도(도/초)", ClampMin = "0.0", ClampMax = "60.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 몽타주 중 카메라가 캐릭터 주위를 천천히 도는 속도. 0이면 정지. 10=은은, 20=확실한 움직임."))
+	float ExecutionOrbitSpeed = 10.f;
+
+	/** 처형 중 카메라 오빗 최대 각도 (도) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Cinematic",
+		meta = (DisplayName = "처형 오빗 최대 각도(도)", ClampMin = "0.0", ClampMax = "90.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 중 카메라가 최대로 회전하는 각도. 15=미세한 움직임, 30=뚜렷한 공전."))
+	float ExecutionOrbitTotalAngle = 15.f;
+
 protected:
 
 	virtual void BeginPlay() override;
