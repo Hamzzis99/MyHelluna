@@ -3,6 +3,7 @@
 #include "Crafting/Actors/Inv_CraftingStation.h"
 #include "Inventory.h"
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/StaticMeshComponent.h"
 #include "Widgets/Crafting/Inv_TabbedCraftingMenu.h"
 #include "InventoryManagement/Components/Inv_InventoryComponent.h"
@@ -67,6 +68,21 @@ void AInv_CraftingStation::OnInteract_Implementation(APlayerController* PlayerCo
 	{
 		BuildComp->ForceEndBuildMode();
 		BuildComp->CloseBuildMenu();
+	}
+
+	// RepairWidget 열려있으면 닫기
+	if (UWorld* CraftWorld = GetWorld())
+	{
+		TArray<UUserWidget*> FoundWidgets;
+		UWidgetBlueprintLibrary::GetAllWidgetsOfClass(CraftWorld, FoundWidgets, UUserWidget::StaticClass(), false);
+		for (UUserWidget* Widget : FoundWidgets)
+		{
+			if (!IsValid(Widget)) continue;
+			if (Widget->GetClass()->GetName().Contains(TEXT("Repair")))
+			{
+				Widget->RemoveFromParent();
+			}
+		}
 	}
 
 	// 크래프팅 메뉴 생성 및 표시

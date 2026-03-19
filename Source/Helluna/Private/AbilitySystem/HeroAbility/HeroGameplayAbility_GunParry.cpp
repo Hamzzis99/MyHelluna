@@ -317,6 +317,18 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		CachedParryExecutionCameraShake = Weapon->ParryExecutionCameraShake;
 		CachedParryExecutionShakeScale = Weapon->ParryExecutionShakeScale;
 
+		// Dynamic VFX 캐싱
+		CachedWarpFOVBurst = Weapon->WarpFOVBurst;
+		CachedWarpChromaticAberration = Weapon->WarpChromaticAberration;
+		CachedWarpPPFadeDuration = Weapon->WarpPostProcessFadeDuration;
+		CachedWarpCameraLagSpeed = Weapon->WarpCameraLagSpeed;
+		CachedWarpCameraLagDuration = Weapon->WarpCameraLagDuration;
+		CachedKillFOVPunch = Weapon->KillFOVPunch;
+		CachedKillFOVPunchDuration = Weapon->KillFOVPunchDuration;
+		CachedKillVignetteIntensity = Weapon->KillVignetteIntensity;
+		CachedKillDesaturation = Weapon->KillDesaturation;
+		CachedKillPPFadeDuration = Weapon->KillPostProcessFadeDuration;
+
 		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 무기 카메라 설정: Weapon=%s, ArmMul=%.2f, FOVMul=%.2f, YawOffset=%.1f, WarpAngle=%.1f, ExecDist=%.0f, Shake=%s, ShakeScale=%.1f"),
 			*Weapon->GetName(), CachedArmLengthMul, CachedFOVMul, CachedYawOffset, CachedWarpAngleOffset, CachedExecutionDistance,
 			CachedParryExecutionCameraShake ? *CachedParryExecutionCameraShake->GetName() : TEXT("None"),
@@ -544,6 +556,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 	BeginCameraEffect(Hero);
 	if (Hero->IsLocallyControlled())
 	{
+		BeginWarpVFX(Hero);
 		Hero->LockMoveInput();
 		Hero->LockLookInput();
 	}
@@ -600,6 +613,12 @@ void UHeroGameplayAbility_GunParry::OnWarpAppearTimerComplete()
 		bMeshHiddenForWarp = false;
 		UE_LOG(LogGunParry, Warning, TEXT("[WarpAppearTimer] CLIENT: 캐릭터 메시 등장 — 딜레이 %.3f초 후"),
 			CachedWarpAppearDelay);
+	}
+
+	// 워프 도착 VFX — FOV를 처형용으로 전환
+	if (Hero->IsLocallyControlled())
+	{
+		OnWarpArrivalVFX(Hero);
 	}
 
 	BeginExecutionMontage();
@@ -776,6 +795,12 @@ void UHeroGameplayAbility_GunParry::OnParryExecutionFireEvent(FGameplayEventData
 	}
 
 	PlayParryExecutionCameraShake(Hero);
+
+	// 킬 순간 다이나믹 VFX (FOV punch + Vignette + Desaturation)
+	if (Hero->IsLocallyControlled())
+	{
+		BeginKillVFX(Hero);
+	}
 
 	if (Hero->HasAuthority())
 	{
@@ -989,30 +1014,39 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 			Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		}
 
+		// 이동+시점 잠금 즉시 해제 (Lock은 IsLocallyControlled에서만 호출되므로 Unlock도 동일)
 		if (Hero->IsLocallyControlled())
 		{
-			// 로컬 클라이언트: 카메라 복귀 완료까지 이동+시점 잠금 유지
-			// EndCameraEffect 람다 완료 시 MoveInput/LookInput/bUseControllerRotationYaw 해제
-			EndCameraEffect(Hero);
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: 카메라 복귀 완료까지 이동+시점 잠금 유지"));
-		}
-		else
-		{
-			// 서버/비로컬: 카메라 연출 없으므로 즉시 해제
+			Hero->UnlockMoveInput();
+			Hero->UnlockLookInput();
 			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: bUseControllerRotationYaw 즉시 원복=%s"),
+				bSavedUseControllerRotationYaw ? TEXT("true") : TEXT("false"));
+		}
 
-			// 서버: ControlRotation 원래 값으로 복원
+		// 서버(비로컬): bUseControllerRotationYaw + ControlRotation 원복
+		if (!Hero->IsLocallyControlled())
+		{
+			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
 			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
 			{
 				FRotator Ctrl = PC->GetControlRotation();
 				Ctrl.Yaw = SavedControlRotationYaw;
 				PC->SetControlRotation(Ctrl);
 			}
-
-			Hero->UnlockMoveInput();
-			Hero->UnlockLookInput();
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bUseControllerRotationYaw 원복 + ControlRotation 복원 + 잠금 해제"));
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bUseControllerRotationYaw 원복 + ControlRotation 복원"));
 		}
+
+		// 킬 VFX 종료 (PostProcess override 리셋)
+		if (Hero->IsLocallyControlled())
+		{
+			EndKillVFX(Hero);
+		}
+
+		// 카메라 복귀 (SpringArm/FOV만 InterpTo, LookInput은 이미 해제됨)
+		EndCameraEffect(Hero);
+		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s: 이동+시점 잠금 즉시 해제 + 카메라 복귀 시작"),
+			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 	}
 
 	ParryTarget = nullptr;
@@ -1068,6 +1102,11 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 				Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 			}
 			Hero->UnlockMoveInput();
+			if (Hero->IsLocallyControlled())
+			{
+				Hero->UnlockLookInput();
+				Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+			}
 			EndCameraEffect(Hero);
 		}
 	}
@@ -1091,6 +1130,26 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 				Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
 			}
 		}
+	}
+
+	// 다이나믹 VFX 타이머 전체 클리어 + 안전 원복
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(WarpPostProcessFadeTimerHandle);
+			World->GetTimerManager().ClearTimer(WarpCameraLagRestoreTimerHandle);
+			World->GetTimerManager().ClearTimer(KillFOVPunchRestoreTimerHandle);
+			World->GetTimerManager().ClearTimer(KillPostProcessFadeTimerHandle);
+		}
+		if (ActorInfo && ActorInfo->AvatarActor.IsValid())
+		{
+			if (AHellunaHeroCharacter* VFXHero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get()))
+			{
+				ResetAllDynamicVFX(VFXHero);
+			}
+		}
+		bDynamicVFXActive = false;
+		UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] VFX 타이머 전체 클리어 + 안전 원복"));
 	}
 
 	// 워프 등장 딜레이 안전 원복 — GA 취소/종료 시 메시 반드시 복원
@@ -1371,9 +1430,7 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 		}
 		if (UCameraComponent* Camera = Hero->GetFollowCamera())
 			Camera->SetFieldOfView(SavedFOV);
-		Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
-		Hero->UnlockMoveInput();
-		Hero->UnlockLookInput();
+		// Lock/Unlock은 HandleExecutionFinished에서 이미 즉시 해제됨 — 여기서 중복 호출 안 함
 		return;
 	}
 
@@ -1382,7 +1439,6 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	TWeakObjectPtr<UCameraComponent> WeakCamera = Hero->GetFollowCamera();
 	TWeakObjectPtr<UWorld> WeakWorld = World;
 	TWeakObjectPtr<APlayerController> WeakPC = Cast<APlayerController>(Hero->GetController());
-	TWeakObjectPtr<AHellunaHeroCharacter> WeakHero = Hero;
 
 	const float TargetArmLength = SavedArmLength;
 	const float TargetFOV = SavedFOV;
@@ -1399,7 +1455,6 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 		float DeltaYaw = FRotator::NormalizeAxis(TargetControlYaw - CurrentYaw);
 		TargetControlYaw = CurrentYaw + DeltaYaw;
 	}
-	const bool bSavedUseCtrlYaw = bSavedUseControllerRotationYaw;
 	const bool bSavedCollisionTest = bSavedDoCollisionTest;
 
 	// TSharedPtr로 람다 내부에서 self-clear 가능
@@ -1409,23 +1464,18 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	constexpr float TickRate = 0.016f;
 	TSharedPtr<int32> TickCount = MakeShared<int32>(0);
 
-	auto InterpLambda = [WeakBoom, WeakCamera, WeakWorld, WeakPC, WeakHero, TimerHandle, TickCount,
+	auto InterpLambda = [WeakBoom, WeakCamera, WeakWorld, WeakPC, TimerHandle, TickCount,
 		TargetArmLength, TargetFOV, TargetSocketOffset, TargetControlYaw,
-		InterpSpeed, bHasOffset, bSavedUseCtrlYaw, bSavedCollisionTest, TickRate]()
+		InterpSpeed, bHasOffset, bSavedCollisionTest, TickRate]()
 	{
 		++(*TickCount);
 
-		// 컴포넌트 모두 소멸 → 타이머 해제 + 안전 복원
+		// 컴포넌트 모두 소멸 → 타이머 해제 (Lock/Unlock은 HandleExecutionFinished에서 이미 처리됨)
 		if (!WeakBoom.IsValid() && !WeakCamera.IsValid())
 		{
-			if (WeakHero.IsValid())
-			{
-				WeakHero->bUseControllerRotationYaw = bSavedUseCtrlYaw;
-				WeakHero->UnlockMoveInput();
-				WeakHero->UnlockLookInput();
-			}
 			if (WeakWorld.IsValid() && TimerHandle.IsValid())
 				WeakWorld->GetTimerManager().ClearTimer(*TimerHandle);
+			UE_LOG(LogGunParry, Warning, TEXT("[CameraReturn] 컴포넌트 소멸 — 타이머 해제 (Lock/Unlock은 이미 처리됨)"));
 			return;
 		}
 
@@ -1496,15 +1546,8 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 				WeakPC->SetControlRotation(FinalCtrl);
 			}
 
-			// bUseControllerRotationYaw 복원 + 이동/시점 잠금 해제 (카메라 복귀 완료)
-			if (WeakHero.IsValid())
-			{
-				WeakHero->bUseControllerRotationYaw = bSavedUseCtrlYaw;
-				WeakHero->UnlockMoveInput();
-				WeakHero->UnlockLookInput();
-			}
-
 			// [Fix: collision-probe] 카메라 충돌 프로브 원복
+			// (Lock/Unlock은 HandleExecutionFinished에서 이미 즉시 해제됨 — 여기서 중복 호출하면 카운터 마이너스)
 			if (WeakBoom.IsValid())
 			{
 				WeakBoom->bDoCollisionTest = bSavedCollisionTest;
@@ -1526,4 +1569,285 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 
 	UE_LOG(LogGunParry, Warning, TEXT("[CameraEffect] END — 부드러운 복귀 시작 (Speed=%.1f, Delay=%.1f)"),
 		CachedReturnSpeed, CachedReturnDelay);
+}
+
+// ═══════════════════════════════════════════════════════════
+// 다이나믹 VFX 헬퍼
+// ═══════════════════════════════════════════════════════════
+
+void UHeroGameplayAbility_GunParry::BeginWarpVFX(AHellunaHeroCharacter* Hero)
+{
+	if (!Hero || !Hero->IsLocallyControlled()) return;
+
+	UCameraComponent* Camera = Hero->GetFollowCamera();
+	USpringArmComponent* Boom = Hero->GetCameraBoom();
+	if (!Camera) return;
+
+	bDynamicVFXActive = true;
+
+	// ExecutionFOV 결정: 무기의 ExecutionFOV > 0이면 직접 사용, 아니면 SavedFOV * CachedFOVMul
+	// (BeginCameraEffect에서 SavedFOV가 이미 저장됨)
+	{
+		AHeroWeapon_GunBase* Weapon = Cast<AHeroWeapon_GunBase>(Hero->GetCurrentWeapon());
+		if (Weapon && Weapon->ExecutionFOV > 0.f)
+		{
+			CachedExecutionFOVValue = Weapon->ExecutionFOV;
+		}
+		else
+		{
+			CachedExecutionFOVValue = SavedFOV * CachedFOVMul;
+		}
+	}
+
+	// A-1. FOV Burst — 속도감
+	if (CachedWarpFOVBurst > 0.f)
+	{
+		Camera->SetFieldOfView(CachedWarpFOVBurst);
+	}
+
+	// A-2. Chromatic Aberration — 순간이동 임팩트
+	if (CachedWarpChromaticAberration > 0.f)
+	{
+		SavedPostProcessBlendWeight = Camera->PostProcessBlendWeight;
+		Camera->PostProcessBlendWeight = 1.0f;
+		Camera->PostProcessSettings.bOverride_SceneFringeIntensity = true;
+		Camera->PostProcessSettings.SceneFringeIntensity = CachedWarpChromaticAberration;
+
+		// 크로매틱 페이드아웃 타이머
+		WarpPPFadeElapsed = 0.f;
+		if (UWorld* World = Hero->GetWorld())
+		{
+			constexpr float TickRate = 0.016f;
+			const float FadeDuration = CachedWarpPPFadeDuration;
+			const float StartIntensity = CachedWarpChromaticAberration;
+
+			World->GetTimerManager().SetTimer(
+				WarpPostProcessFadeTimerHandle,
+				FTimerDelegate::CreateWeakLambda(this, [this, TickRate, FadeDuration, StartIntensity]()
+				{
+					WarpPPFadeElapsed += TickRate;
+					const float Alpha = FMath::Clamp(WarpPPFadeElapsed / FadeDuration, 0.f, 1.f);
+
+					AHellunaHeroCharacter* H = Cast<AHellunaHeroCharacter>(GetAvatarActorFromActorInfo());
+					if (!H) return;
+					UCameraComponent* C = H->GetFollowCamera();
+					if (!C) return;
+
+					C->PostProcessSettings.SceneFringeIntensity = FMath::Lerp(StartIntensity, 0.f, Alpha);
+
+					if (Alpha >= 1.f)
+					{
+						C->PostProcessSettings.bOverride_SceneFringeIntensity = false;
+						C->PostProcessSettings.SceneFringeIntensity = 0.f;
+						C->PostProcessBlendWeight = SavedPostProcessBlendWeight;
+
+						if (UWorld* W = H->GetWorld())
+						{
+							W->GetTimerManager().ClearTimer(WarpPostProcessFadeTimerHandle);
+						}
+						UE_LOG(LogGunParry, Warning, TEXT("[WarpVFX] 크로매틱 페이드아웃 완료"));
+					}
+				}),
+				TickRate, true);
+		}
+	}
+
+	// A-4. CameraLag — 카메라가 느리게 추적
+	if (CachedWarpCameraLagSpeed > 0.f && Boom)
+	{
+		bSavedEnableCameraLag = Boom->bEnableCameraLag;
+		SavedCameraLagSpeed = Boom->CameraLagSpeed;
+		Boom->bEnableCameraLag = true;
+		Boom->CameraLagSpeed = CachedWarpCameraLagSpeed;
+
+		// 복원 타이머 (one-shot)
+		if (UWorld* World = Hero->GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				WarpCameraLagRestoreTimerHandle,
+				FTimerDelegate::CreateWeakLambda(this, [this]()
+				{
+					AHellunaHeroCharacter* H = Cast<AHellunaHeroCharacter>(GetAvatarActorFromActorInfo());
+					if (!H) return;
+					if (USpringArmComponent* B = H->GetCameraBoom())
+					{
+						B->bEnableCameraLag = bSavedEnableCameraLag;
+						B->CameraLagSpeed = SavedCameraLagSpeed;
+					}
+					UE_LOG(LogGunParry, Warning, TEXT("[WarpVFX] CameraLag 원복 — Speed=%.1f, bEnable=%s"),
+						SavedCameraLagSpeed, bSavedEnableCameraLag ? TEXT("true") : TEXT("false"));
+				}),
+				CachedWarpCameraLagDuration, false);
+		}
+	}
+
+	UE_LOG(LogGunParry, Warning, TEXT("[WarpVFX] 시작 — FOV=%.0f→%.0f, ChromaticAberration=%.1f, CameraLag=%.1f"),
+		SavedFOV, CachedWarpFOVBurst, CachedWarpChromaticAberration, CachedWarpCameraLagSpeed);
+}
+
+void UHeroGameplayAbility_GunParry::OnWarpArrivalVFX(AHellunaHeroCharacter* Hero)
+{
+	if (!Hero || !Hero->IsLocallyControlled() || !bDynamicVFXActive) return;
+
+	UCameraComponent* Camera = Hero->GetFollowCamera();
+	if (!Camera) return;
+
+	// FOV를 처형용으로 전환 (BeginWarpVFX에서 CachedExecutionFOVValue 계산됨)
+	Camera->SetFieldOfView(CachedExecutionFOVValue);
+
+	UE_LOG(LogGunParry, Warning, TEXT("[WarpVFX] 도착 — FOV→%.0f"), CachedExecutionFOVValue);
+}
+
+void UHeroGameplayAbility_GunParry::BeginKillVFX(AHellunaHeroCharacter* Hero)
+{
+	if (!Hero || !Hero->IsLocallyControlled()) return;
+
+	UCameraComponent* Camera = Hero->GetFollowCamera();
+	if (!Camera) return;
+
+	// A-5. FOV Punch — 킬 순간 줌인
+	if (CachedKillFOVPunch > 0.f)
+	{
+		Camera->SetFieldOfView(CachedKillFOVPunch);
+
+		// FOV 펀치 복귀 타이머 (one-shot → CachedExecutionFOVValue로 복귀)
+		if (UWorld* World = Hero->GetWorld())
+		{
+			const float RestoreFOV = CachedExecutionFOVValue;
+			World->GetTimerManager().SetTimer(
+				KillFOVPunchRestoreTimerHandle,
+				FTimerDelegate::CreateWeakLambda(this, [this, RestoreFOV]()
+				{
+					AHellunaHeroCharacter* H = Cast<AHellunaHeroCharacter>(GetAvatarActorFromActorInfo());
+					if (!H || !H->IsLocallyControlled()) return;
+					if (UCameraComponent* C = H->GetFollowCamera())
+					{
+						C->SetFieldOfView(RestoreFOV);
+					}
+					UE_LOG(LogGunParry, Warning, TEXT("[KillVFX] FOV 펀치 복귀 — FOV=%.0f"), RestoreFOV);
+				}),
+				CachedKillFOVPunchDuration, false);
+		}
+	}
+
+	// A-6. Vignette + Desaturation — 영화 느낌
+	bool bHasPostProcess = false;
+
+	if (CachedKillVignetteIntensity > 0.f)
+	{
+		Camera->PostProcessBlendWeight = 1.0f;
+		Camera->PostProcessSettings.bOverride_VignetteIntensity = true;
+		Camera->PostProcessSettings.VignetteIntensity = CachedKillVignetteIntensity;
+		bHasPostProcess = true;
+	}
+
+	if (CachedKillDesaturation < 1.f)
+	{
+		Camera->PostProcessBlendWeight = 1.0f;
+		Camera->PostProcessSettings.bOverride_ColorSaturation = true;
+		Camera->PostProcessSettings.ColorSaturation = FVector4(
+			CachedKillDesaturation, CachedKillDesaturation, CachedKillDesaturation, 1.0f);
+		bHasPostProcess = true;
+	}
+
+	// PostProcess 페이드아웃 타이머
+	if (bHasPostProcess)
+	{
+		KillPPFadeElapsed = 0.f;
+		if (UWorld* World = Hero->GetWorld())
+		{
+			constexpr float TickRate = 0.016f;
+			const float FadeDuration = CachedKillPPFadeDuration;
+			const float StartVignette = CachedKillVignetteIntensity;
+			const float StartSaturation = CachedKillDesaturation;
+
+			World->GetTimerManager().SetTimer(
+				KillPostProcessFadeTimerHandle,
+				FTimerDelegate::CreateWeakLambda(this, [this, TickRate, FadeDuration, StartVignette, StartSaturation]()
+				{
+					KillPPFadeElapsed += TickRate;
+					const float Alpha = FMath::Clamp(KillPPFadeElapsed / FadeDuration, 0.f, 1.f);
+
+					AHellunaHeroCharacter* H = Cast<AHellunaHeroCharacter>(GetAvatarActorFromActorInfo());
+					if (!H) return;
+					UCameraComponent* C = H->GetFollowCamera();
+					if (!C) return;
+
+					if (StartVignette > 0.f)
+					{
+						C->PostProcessSettings.VignetteIntensity = FMath::Lerp(StartVignette, 0.f, Alpha);
+					}
+					if (StartSaturation < 1.f)
+					{
+						const float CurSat = FMath::Lerp(StartSaturation, 1.f, Alpha);
+						C->PostProcessSettings.ColorSaturation = FVector4(CurSat, CurSat, CurSat, 1.0f);
+					}
+
+					if (Alpha >= 1.f)
+					{
+						C->PostProcessSettings.bOverride_VignetteIntensity = false;
+						C->PostProcessSettings.VignetteIntensity = 0.f;
+						C->PostProcessSettings.bOverride_ColorSaturation = false;
+						C->PostProcessSettings.ColorSaturation = FVector4(1, 1, 1, 1);
+
+						if (UWorld* W = H->GetWorld())
+						{
+							W->GetTimerManager().ClearTimer(KillPostProcessFadeTimerHandle);
+						}
+						UE_LOG(LogGunParry, Warning, TEXT("[KillVFX] 포스트프로세스 페이드아웃 완료"));
+					}
+				}),
+				TickRate, true);
+		}
+	}
+
+	UE_LOG(LogGunParry, Warning, TEXT("[KillVFX] 시작 — FOV=%.0f→%.0f, Vignette=%.1f, Saturation=%.1f"),
+		CachedExecutionFOVValue, CachedKillFOVPunch, CachedKillVignetteIntensity, CachedKillDesaturation);
+}
+
+void UHeroGameplayAbility_GunParry::EndKillVFX(AHellunaHeroCharacter* Hero)
+{
+	if (!Hero || !Hero->IsLocallyControlled()) return;
+
+	// 타이머 클리어
+	if (UWorld* World = Hero->GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(KillPostProcessFadeTimerHandle);
+		World->GetTimerManager().ClearTimer(KillFOVPunchRestoreTimerHandle);
+	}
+
+	// Kill 관련 PostProcess override 리셋 (크로매틱은 자체 페이드 타이머가 처리)
+	if (UCameraComponent* Camera = Hero->GetFollowCamera())
+	{
+		Camera->PostProcessSettings.bOverride_VignetteIntensity = false;
+		Camera->PostProcessSettings.VignetteIntensity = 0.f;
+		Camera->PostProcessSettings.bOverride_ColorSaturation = false;
+		Camera->PostProcessSettings.ColorSaturation = FVector4(1, 1, 1, 1);
+	}
+
+	UE_LOG(LogGunParry, Warning, TEXT("[KillVFX] EndKillVFX — PostProcess override 리셋"));
+}
+
+void UHeroGameplayAbility_GunParry::ResetAllDynamicVFX(AHellunaHeroCharacter* Hero)
+{
+	if (!Hero || !Hero->IsLocallyControlled()) return;
+
+	// PostProcess 전부 원복
+	if (UCameraComponent* Camera = Hero->GetFollowCamera())
+	{
+		Camera->PostProcessSettings.bOverride_SceneFringeIntensity = false;
+		Camera->PostProcessSettings.SceneFringeIntensity = 0.f;
+		Camera->PostProcessSettings.bOverride_VignetteIntensity = false;
+		Camera->PostProcessSettings.VignetteIntensity = 0.f;
+		Camera->PostProcessSettings.bOverride_ColorSaturation = false;
+		Camera->PostProcessSettings.ColorSaturation = FVector4(1, 1, 1, 1);
+		Camera->PostProcessBlendWeight = SavedPostProcessBlendWeight;
+	}
+
+	// CameraLag 원복
+	if (USpringArmComponent* Boom = Hero->GetCameraBoom())
+	{
+		Boom->bEnableCameraLag = bSavedEnableCameraLag;
+		Boom->CameraLagSpeed = SavedCameraLagSpeed;
+	}
 }

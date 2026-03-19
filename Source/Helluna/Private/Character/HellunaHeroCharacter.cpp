@@ -1231,8 +1231,8 @@ void AHellunaHeroCharacter::Multicast_SpawnParryGhostTrail_Implementation(
 	{
 		const float Alpha = (float)(i + 1) / (float)(Count + 1);
 		// 도착지(StartLocation)에서 출발지(EndLocation) 방향으로 잔상 배치 — 카메라 시야 안에 들어옴
-		const FVector TrailLoc = FMath::Lerp(StartLocation, EndLocation, Alpha * 0.5f);
-		const float OpacityMul = 1.f - Alpha * 0.5f;
+		const FVector TrailLoc = FMath::Lerp(StartLocation, EndLocation, Alpha * 0.4f);
+		const float OpacityMul = 1.f - Alpha * 0.4f;
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;

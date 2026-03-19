@@ -278,6 +278,87 @@ public:
 			ToolTip = "워프 후 캐릭터가 도착지에 나타나기까지 딜레이(초). 0이면 즉시 나타남. 0.05=순간이동 잔상 느낌, 0.1=확실한 순간이동 느낌. 권총=0.05 추천."))
 	float WarpAppearDelay = 0.05f;
 
+	// ═══════════════════════════════════════════════════════════
+	// 건패링 다이나믹 VFX (로컬 전용, 카메라+포스트프로세스)
+	// ═══════════════════════════════════════════════════════════
+
+	/** 워프 순간 FOV 확장 (속도감). 0이면 비활성. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "워프 FOV 버스트", ClampMin = "0.0", ClampMax = "180.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "워프 순간 FOV를 확 넓혀 속도감 연출. 0이면 비활성. 권총=140 추천."))
+	float WarpFOVBurst = 140.f;
+
+	/** 처형 중 FOV (집중감). 0이면 기존 CameraFOVMultiplier 사용. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "처형 FOV", ClampMin = "0.0", ClampMax = "150.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 중 고정 FOV. 0이면 SavedFOV*CameraFOVMultiplier 사용. 90=집중감."))
+	float ExecutionFOV = 90.f;
+
+	/** 워프 순간 크로매틱 어버레이션(색수차) 강도. 0이면 비활성. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "워프 색수차 강도", ClampMin = "0.0", ClampMax = "10.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "워프 순간 색수차(Chromatic Aberration) 강도. 순간이동 임팩트. 0이면 비활성. 권총=5.0 추천."))
+	float WarpChromaticAberration = 5.0f;
+
+	/** 워프 포스트프로세스(색수차) 페이드아웃 시간(초) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "워프 PP 페이드 시간(초)", ClampMin = "0.05", ClampMax = "1.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "색수차가 원복되는 데 걸리는 시간(초). 0.3=자연스러움."))
+	float WarpPostProcessFadeDuration = 0.3f;
+
+	/** 워프 시 카메라 추적 속도 (CameraLag). 낮을수록 느리게 따라감. 0이면 비활성. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "워프 카메라 렉 속도", ClampMin = "0.0", ClampMax = "50.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "워프 시 카메라가 캐릭터를 느리게 추적하는 속도. 낮을수록 잔상이 오래 보임. 0이면 비활성. 권총=3.0 추천."))
+	float WarpCameraLagSpeed = 3.0f;
+
+	/** 카메라 렉 유지 시간(초) — 이후 원래 값으로 복귀 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "카메라 렉 지속(초)", ClampMin = "0.0", ClampMax = "1.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "카메라 렉 유지 시간. 0.2=빠른 추적. 워프 후 카메라가 도착지에 도달하는 시간."))
+	float WarpCameraLagDuration = 0.2f;
+
+	/** 킬 순간 FOV 줌인 (타격 임팩트). 0이면 비활성. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "킬 FOV 펀치", ClampMin = "0.0", ClampMax = "120.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "킬 순간 FOV를 확 좁혀 타격 임팩트 연출. 0이면 비활성. 권총=70 추천."))
+	float KillFOVPunch = 70.f;
+
+	/** FOV 펀치 복귀 시간(초) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "킬 FOV 펀치 복귀(초)", ClampMin = "0.05", ClampMax = "1.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "킬 FOV 펀치가 원복되는 시간. 0.2=빠른 복귀."))
+	float KillFOVPunchDuration = 0.2f;
+
+	/** 킬 순간 비네팅 강도 (화면 가장자리 어두워짐). 0이면 비활성. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "킬 비네트 강도", ClampMin = "0.0", ClampMax = "2.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "킬 순간 화면 가장자리를 어둡게. 영화 느낌. 0이면 비활성. 권총=1.5 추천."))
+	float KillVignetteIntensity = 1.5f;
+
+	/** 킬 순간 채도 (0=완전 흑백, 1=변화없음) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "킬 채도 감소", ClampMin = "0.0", ClampMax = "1.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "킬 순간 색빠짐 효과. 0=완전 흑백, 1=변화없음. 0.3=강한 채도 감소."))
+	float KillDesaturation = 0.3f;
+
+	/** 킬 포스트프로세스(비네트+채도) 페이드아웃 시간(초) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|DynamicVFX",
+		meta = (DisplayName = "킬 PP 페이드 시간(초)", ClampMin = "0.1", ClampMax = "2.0",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "킬 포스트프로세스 효과가 원복되는 시간(초). 0.5=자연스러움."))
+	float KillPostProcessFadeDuration = 0.5f;
+
 protected:
 
 	virtual void BeginPlay() override;

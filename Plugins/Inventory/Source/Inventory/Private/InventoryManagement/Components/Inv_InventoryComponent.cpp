@@ -2630,11 +2630,12 @@ void UInv_InventoryComponent::CloseOtherMenus()
 	for (UUserWidget* Widget : FoundWidgets)
 	{
 		if (!IsValid(Widget)) continue;
-		if (Widget->GetClass()->GetName().Contains(TEXT("CraftingMenu")))
+		const FString WidgetClassName = Widget->GetClass()->GetName();
+		if (WidgetClassName.Contains(TEXT("CraftingMenu")) || WidgetClassName.Contains(TEXT("Repair")))
 		{
 			Widget->RemoveFromParent();
 #if INV_DEBUG_INVENTORY
-			UE_LOG(LogTemp, Log, TEXT("CloseOtherMenus: CraftingMenu 닫힘: %s"), *Widget->GetClass()->GetName());
+			UE_LOG(LogTemp, Log, TEXT("CloseOtherMenus: 위젯 닫힘: %s"), *WidgetClassName);
 #endif
 		}
 	}

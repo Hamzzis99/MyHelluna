@@ -397,13 +397,13 @@ void UInv_BuildingComponent::CloseCraftingMenuIfOpen()
 	{
 		if (!IsValid(Widget)) continue;
 
-		// 클래스 이름에 "CraftingMenu"가 포함되어 있으면 제거
+		// 클래스 이름에 "CraftingMenu" 또는 "Repair"가 포함되어 있으면 제거
 		FString WidgetClassName = Widget->GetClass()->GetName();
-		if (WidgetClassName.Contains(TEXT("CraftingMenu")))
+		if (WidgetClassName.Contains(TEXT("CraftingMenu")) || WidgetClassName.Contains(TEXT("Repair")))
 		{
 			Widget->RemoveFromParent();
 #if INV_DEBUG_BUILD
-			UE_LOG(LogTemp, Log, TEXT("Crafting Menu 닫힘: %s (BuildMenu 열림)"), *WidgetClassName);
+			UE_LOG(LogTemp, Log, TEXT("위젯 닫힘: %s (BuildMenu 열림)"), *WidgetClassName);
 #endif
 		}
 	}

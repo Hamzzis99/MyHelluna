@@ -7,7 +7,10 @@
 #include "Component/RepairComponent.h"
 #include "Widgets/RepairWidget.h"
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "InventoryManagement/Utils/Inv_InventoryStatics.h"
+#include "InventoryManagement/Components/Inv_InventoryComponent.h"
+#include "Building/Components/Inv_BuildingComponent.h"
 
 #include "DebugHelper.h"
 #include "Helluna.h"
@@ -91,6 +94,34 @@ void UHeroGameplayAbility_Repair::Repair(const FGameplayAbilityActorInfo* ActorI
 
 	UInv_InventoryComponent* InvComp = UInv_InventoryStatics::GetInventoryComponent(PC);
 	if (!InvComp) return;
+
+	// 방안 B: 다른 위젯 열려있으면 먼저 닫기
+	if (InvComp->IsMenuOpen())
+	{
+		InvComp->ToggleInventoryMenu();
+	}
+
+	UInv_BuildingComponent* BuildComp = PC->FindComponentByClass<UInv_BuildingComponent>();
+	if (IsValid(BuildComp))
+	{
+		BuildComp->ForceEndBuildMode();
+		BuildComp->CloseBuildMenu();
+	}
+
+	// CraftingMenu 열려있으면 닫기
+	if (UWorld* RepairWorld = GetWorld())
+	{
+		TArray<UUserWidget*> FoundWidgets;
+		UWidgetBlueprintLibrary::GetAllWidgetsOfClass(RepairWorld, FoundWidgets, UUserWidget::StaticClass(), false);
+		for (UUserWidget* Widget : FoundWidgets)
+		{
+			if (!IsValid(Widget)) continue;
+			if (Widget->GetClass()->GetName().Contains(TEXT("CraftingMenu")))
+			{
+				Widget->RemoveFromParent();
+			}
+		}
+	}
 
 	if (!RepairMaterialWidgetClass)
 	{

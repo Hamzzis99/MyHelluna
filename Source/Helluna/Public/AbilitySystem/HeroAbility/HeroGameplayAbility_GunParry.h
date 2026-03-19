@@ -166,6 +166,25 @@ private:
 	void BeginExecutionMontage();
 
 	// ═══════════════════════════════════════════════════════════
+	// 다이나믹 VFX 헬퍼 (로컬 전용)
+	// ═══════════════════════════════════════════════════════════
+
+	/** 워프 시작 VFX — FOV burst + ChromaticAberration + CameraLag */
+	void BeginWarpVFX(AHellunaHeroCharacter* Hero);
+
+	/** 워프 도착 VFX — FOV를 처형용으로 전환 */
+	void OnWarpArrivalVFX(AHellunaHeroCharacter* Hero);
+
+	/** 킬 순간 VFX — FOV punch + Vignette + Desaturation */
+	void BeginKillVFX(AHellunaHeroCharacter* Hero);
+
+	/** 킬 VFX 종료 — PostProcess override 리셋 */
+	void EndKillVFX(AHellunaHeroCharacter* Hero);
+
+	/** 모든 PostProcess + CameraLag를 안전 원복 (EndAbility 방어선) */
+	void ResetAllDynamicVFX(AHellunaHeroCharacter* Hero);
+
+	// ═══════════════════════════════════════════════════════════
 	// 런타임 상태
 	// ═══════════════════════════════════════════════════════════
 
@@ -236,4 +255,39 @@ private:
 	/** 캐싱한 처형 몽타주 (BeginExecutionMontage에서 사용) */
 	UPROPERTY()
 	TObjectPtr<UAnimMontage> CachedExecutionMontage = nullptr;
+
+	// ═══════════════════════════════════════════════════════════
+	// 다이나믹 VFX — 타이머 핸들 + 저장/캐시
+	// ═══════════════════════════════════════════════════════════
+	FTimerHandle WarpPostProcessFadeTimerHandle;
+	FTimerHandle WarpCameraLagRestoreTimerHandle;
+	FTimerHandle KillFOVPunchRestoreTimerHandle;
+	FTimerHandle KillPostProcessFadeTimerHandle;
+
+	// CameraLag 저장값
+	bool bSavedEnableCameraLag = false;
+	float SavedCameraLagSpeed = 10.f;
+	float SavedPostProcessBlendWeight = 1.0f;
+
+	// 페이드 경과 시간
+	float WarpPPFadeElapsed = 0.f;
+	float KillPPFadeElapsed = 0.f;
+
+	// 처형 FOV 값 (ExecutionFOV > 0이면 사용, 아니면 SavedFOV * CachedFOVMul)
+	float CachedExecutionFOVValue = 90.f;
+
+	// 무기에서 캐싱
+	float CachedWarpFOVBurst = 140.f;
+	float CachedWarpChromaticAberration = 5.0f;
+	float CachedWarpPPFadeDuration = 0.3f;
+	float CachedWarpCameraLagSpeed = 3.0f;
+	float CachedWarpCameraLagDuration = 0.2f;
+	float CachedKillFOVPunch = 70.f;
+	float CachedKillFOVPunchDuration = 0.2f;
+	float CachedKillVignetteIntensity = 1.5f;
+	float CachedKillDesaturation = 0.3f;
+	float CachedKillPPFadeDuration = 0.5f;
+
+	/** 다이나믹 VFX가 현재 활성 상태인지 (중복 호출/원복 추적) */
+	bool bDynamicVFXActive = false;
 };
