@@ -464,6 +464,10 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		{
 			SavedControlRotationYaw = PC->GetControlRotation().Yaw;
 
+			UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] ActivateAbility 워프 직전 — PC.Yaw=%.1f, SavedYaw=%.1f, bUseCtrlRotYaw=%s"),
+				PC->GetControlRotation().Yaw, SavedControlRotationYaw,
+				Hero->bUseControllerRotationYaw ? TEXT("T") : TEXT("F"));
+
 			// 카메라 Yaw: 워프 방향 기준 절대 오프셋 (0=회전없음, 180=정면, 210=정면옆)
 			FRotator CameraRotation = WarpRotation;
 			CameraRotation.Yaw += CachedYawOffset;
@@ -535,6 +539,8 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 
 									UE_LOG(LogGunParry, Warning, TEXT("[CameraEntry] 완료 — Yaw=%.1f (%.2f초, %d프레임)"),
 										TargetCameraEntryRotation.Yaw, CameraEntryElapsedTime, CameraEntryTickCount);
+									UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] CameraEntry 완료 — PC.Yaw=%.1f"),
+										LambdaPC->GetControlRotation().Yaw);
 
 									// 카메라 진입 완료 → 슬로우 오빗 시작
 									if (CachedOrbitSpeed > 0.f && CachedOrbitTotalAngle > 0.f)
@@ -575,6 +581,8 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 										}
 										UE_LOG(LogGunParry, Warning, TEXT("[Orbit] 시작 — Speed=%.1f도/초, Max=%.1f도, BaseYaw=%.1f"),
 											CachedOrbitSpeed, CachedOrbitTotalAngle, OrbitBaseYaw);
+										UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] Orbit 시작 — PC.Yaw=%.1f"),
+											LambdaPC->GetControlRotation().Yaw);
 									}
 								}
 							}),
@@ -586,7 +594,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			{
 				// 서버(비로컬): 즉시 ControlRotation 세팅 — 리플리케이션용
 				PC->SetControlRotation(CameraRotation);
-				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] SERVER: ControlRotation 즉시 세팅 Yaw=%.1f (리플리케이션용)"),
+				UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] SERVER ActivateAbility — SetControlRotation Yaw=%.1f (리플리케이션용)"),
 					CameraRotation.Yaw);
 			}
 		}
@@ -1120,22 +1128,28 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		if (Hero->IsLocallyControlled())
 		{
 			Hero->UnlockMoveInput();
+
+			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+			{
+				UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] HandleFinished LookInput 해제 직전 — PC.Yaw=%.1f, bUseCtrlRotYaw=%s"),
+					PC->GetControlRotation().Yaw, Hero->bUseControllerRotationYaw ? TEXT("T") : TEXT("F"));
+			}
+
 			Hero->UnlockLookInput();
 			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: LookInput 해제 + bUseControllerRotationYaw 원복 (Yaw 복원 없음 — 현재 방향 유지)"));
+
+			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+			{
+				UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] HandleFinished LookInput 해제 직후 — PC.Yaw=%.1f, bUseCtrlRotYaw=%s"),
+					PC->GetControlRotation().Yaw, Hero->bUseControllerRotationYaw ? TEXT("T") : TEXT("F"));
+			}
 		}
 
 		// 서버(비로컬): bUseControllerRotationYaw + ControlRotation 원복
 		if (!Hero->IsLocallyControlled())
 		{
 			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
-			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
-			{
-				FRotator Ctrl = PC->GetControlRotation();
-				Ctrl.Yaw = SavedControlRotationYaw;
-				PC->SetControlRotation(Ctrl);
-			}
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bUseControllerRotationYaw 원복 + ControlRotation 복원"));
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bUseControllerRotationYaw 원복 (Yaw 복원 없음)"));
 		}
 
 		// 킬 VFX 종료 (PostProcess override 리셋)
@@ -1205,13 +1219,6 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 			Hero->UnlockMoveInput();
 			if (Hero->IsLocallyControlled())
 			{
-				// [Fix: yaw-restore] EndAbility 폴백에서도 Yaw 복원
-				if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
-				{
-					FRotator RestoreCtrl = PC->GetControlRotation();
-					RestoreCtrl.Yaw = SavedControlRotationYaw;
-					PC->SetControlRotation(RestoreCtrl);
-				}
 				Hero->UnlockLookInput();
 				Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
 			}
@@ -1557,15 +1564,6 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	const float InterpSpeed = CachedReturnSpeed;
 	const bool bHasOffset = !CachedCameraTargetOffset.IsZero();
 
-	// ControlRotation 복귀 목표 = 처형 전 원래 보던 방향
-	// [Fix: yaw-wrap] 최단 경로 Yaw 정규화
-	float TargetControlYaw = SavedControlRotationYaw;
-	if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
-	{
-		float CurrentYaw = PC->GetControlRotation().Yaw;
-		float DeltaYaw = FRotator::NormalizeAxis(TargetControlYaw - CurrentYaw);
-		TargetControlYaw = CurrentYaw + DeltaYaw;
-	}
 	const bool bSavedCollisionTest = bSavedDoCollisionTest;
 
 	// TSharedPtr로 람다 내부에서 self-clear 가능
@@ -1576,7 +1574,7 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	TSharedPtr<int32> TickCount = MakeShared<int32>(0);
 
 	auto InterpLambda = [WeakBoom, WeakCamera, WeakWorld, WeakPC, TimerHandle, TickCount,
-		TargetArmLength, TargetFOV, TargetSocketOffset, TargetControlYaw,
+		TargetArmLength, TargetFOV, TargetSocketOffset,
 		InterpSpeed, bHasOffset, bSavedCollisionTest, TickRate]()
 	{
 		++(*TickCount);
@@ -1595,9 +1593,18 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 		{
 			const float CurArm = WeakBoom.IsValid() ? WeakBoom->TargetArmLength : 0.f;
 			const float CurFOV = WeakCamera.IsValid() ? WeakCamera->FieldOfView : 0.f;
+			UE_LOG(LogGunParry, Warning, TEXT("[CameraReturn] 시작 — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f (Yaw 미제어)"),
+				CurArm, TargetArmLength, CurFOV, TargetFOV);
+		}
+
+		// DEBUG_YAW: 처음 5틱 Yaw 추적
+		if (*TickCount <= 5)
+		{
 			const float CurYaw = WeakPC.IsValid() ? WeakPC->GetControlRotation().Yaw : 0.f;
-			UE_LOG(LogGunParry, Warning, TEXT("[CameraReturn] 시작 — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f, ControlYaw=%.1f→%.1f"),
-				CurArm, TargetArmLength, CurFOV, TargetFOV, CurYaw, TargetControlYaw);
+			const float CurFOV = WeakCamera.IsValid() ? WeakCamera->FieldOfView : 0.f;
+			const float CurArm = WeakBoom.IsValid() ? WeakBoom->TargetArmLength : 0.f;
+			UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] CameraReturn 틱 %d — PC.Yaw=%.1f, FOV=%.0f, ArmLength=%.0f"),
+				*TickCount, CurYaw, CurFOV, CurArm);
 		}
 
 		bool bDone = true;
@@ -1644,15 +1651,16 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 			// [Fix: mouse-stiffness] Yaw 스냅 제거 — 마우스가 이미 제어 중
 
 			// [Fix: collision-probe] 카메라 충돌 프로브 원복
-			// (Lock/Unlock은 HandleExecutionFinished에서 이미 즉시 해제됨 — 여기서 중복 호출하면 카운터 마이너스)
 			if (WeakBoom.IsValid())
 			{
 				WeakBoom->bDoCollisionTest = bSavedCollisionTest;
+				UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] bDoCollisionTest 복원=%s — 이 시점 PC.Yaw=%.1f"),
+					bSavedCollisionTest ? TEXT("true") : TEXT("false"),
+					WeakPC.IsValid() ? WeakPC->GetControlRotation().Yaw : 0.f);
 			}
 
-			const float FinalYaw = WeakPC.IsValid() ? WeakPC->GetControlRotation().Yaw : TargetControlYaw;
-			UE_LOG(LogGunParry, Warning, TEXT("[CameraReturn] 완료 — ArmLength=%.0f, FOV=%.0f, ControlYaw=%.1f (소요 프레임=%d)"),
-				TargetArmLength, TargetFOV, FinalYaw, *TickCount);
+			UE_LOG(LogGunParry, Warning, TEXT("[CameraReturn] 완료 — ArmLength=%.0f, FOV=%.0f (소요 프레임=%d, Yaw 미제어)"),
+				TargetArmLength, TargetFOV, *TickCount);
 
 			if (WeakWorld.IsValid() && TimerHandle.IsValid())
 				WeakWorld->GetTimerManager().ClearTimer(*TimerHandle);
@@ -2063,6 +2071,10 @@ void UHeroGameplayAbility_GunParry::EndKillVFX(AHellunaHeroCharacter* Hero)
 			World->GetTimerManager().ClearTimer(OrbitTimerHandle);
 		}
 		UE_LOG(LogGunParry, Warning, TEXT("[Orbit] 정지 — 처형 종료"));
+		if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+		{
+			UE_LOG(LogGunParry, Warning, TEXT("[DEBUG_YAW] Orbit 정지 — PC.Yaw=%.1f"), PC->GetControlRotation().Yaw);
+		}
 	}
 
 	UE_LOG(LogGunParry, Warning, TEXT("[KillVFX] EndKillVFX — PostProcess override 리셋"));
