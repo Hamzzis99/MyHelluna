@@ -273,44 +273,9 @@ void UInv_BuildMenu::SetupBuildingPreview()
 
 	CleanupBuildingPreview();
 
-	// 메시 가져오기: PreviewMesh 우선 → ActualBuildingClass CDO 폴백 → GhostActorClass CDO 폴백
+	// 메시 가져오기: BuildableActor CDO의 GetEffectivePreviewMesh()가
+	// PreviewMesh → BuildingMesh 폴백을 자동 처리
 	UStaticMesh* PreviewMesh = SelectedBuildingButton->GetPreviewMesh();
-
-	if (!IsValid(PreviewMesh))
-	{
-		// ActualBuildingClass CDO에서 StaticMeshComponent 탐색
-		TSubclassOf<AActor> ActualClass = SelectedBuildingButton->GetActualBuildingClass();
-		if (ActualClass)
-		{
-			AActor* CDO = ActualClass->GetDefaultObject<AActor>();
-			if (IsValid(CDO))
-			{
-				UStaticMeshComponent* SMComp = CDO->FindComponentByClass<UStaticMeshComponent>();
-				if (IsValid(SMComp))
-				{
-					PreviewMesh = SMComp->GetStaticMesh();
-				}
-			}
-		}
-	}
-
-	if (!IsValid(PreviewMesh))
-	{
-		// GhostActorClass CDO에서 StaticMeshComponent 탐색
-		TSubclassOf<AActor> GhostClass = SelectedBuildingButton->GetGhostActorClass();
-		if (GhostClass)
-		{
-			AActor* CDO = GhostClass->GetDefaultObject<AActor>();
-			if (IsValid(CDO))
-			{
-				UStaticMeshComponent* SMComp = CDO->FindComponentByClass<UStaticMeshComponent>();
-				if (IsValid(SMComp))
-				{
-					PreviewMesh = SMComp->GetStaticMesh();
-				}
-			}
-		}
-	}
 
 	if (!IsValid(PreviewMesh))
 	{

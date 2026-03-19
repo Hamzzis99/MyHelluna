@@ -7,11 +7,8 @@
 
 AInv_CraftingStation::AInv_CraftingStation()
 {
-	PrimaryActorTick.bCanEverTick = false;
-
-	// 스테이션 메시 컴포넌트 생성
-	StationMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StationMesh"));
-	RootComponent = StationMesh;
+	// 부모(Inv_BuildableActor → Inv_BuildingActor)에서 BuildingMesh + RootComponent 이미 생성됨
+	// StationMesh 제거 → 부모의 BuildingMesh 사용
 }
 
 void AInv_CraftingStation::BeginPlay()

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
+#include "Building/Actor/Inv_BuildableActor.h"
 #include "Crafting/Interfaces/Inv_CraftingInterface.h"
 #include "Inv_CraftingStation.generated.h"
 
@@ -12,13 +12,17 @@ class UUserWidget;
 /**
  * 크래프팅 스테이션 베이스 액터
  * BP_WeaponCrafting, BP_PotionCrafting 등으로 블루프린트 확장 가능
+ *
+ * 변경: AActor → AInv_BuildableActor 상속
+ * - StationMesh 제거 → 부모의 BuildingMesh 사용
+ * - 건설 데이터(이름, 아이콘, 재료, 프리뷰)는 BuildableActor의 Class Defaults에서 설정
  */
 UCLASS(Blueprintable)
-class INVENTORY_API AInv_CraftingStation : public AActor, public IInv_CraftingInterface
+class INVENTORY_API AInv_CraftingStation : public AInv_BuildableActor, public IInv_CraftingInterface
 {
 	GENERATED_BODY()
-	
-public:	
+
+public:
 	AInv_CraftingStation();
 
 	// IInv_CraftingInterface 구현
@@ -53,10 +57,6 @@ protected:
 		meta = (DisplayName = "거리 체크 간격", Tooltip = "플레이어와의 거리를 확인하는 주기(초). 메뉴가 열린 상태에서 거리를 벗어나면 자동으로 닫힙니다.", ClampMin = "0.1", ClampMax = "5.0"))
 	float DistanceCheckInterval = 0.5f;
 
-	// 스테이션 메시 (외형)
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "제작|컴포넌트", meta = (DisplayName = "스테이션 메시"))
-	TObjectPtr<UStaticMeshComponent> StationMesh;
-
 private:
 	// 플레이어별 크래프팅 메뉴 맵 (멀티플레이 지원)
 	UPROPERTY()
@@ -72,4 +72,3 @@ private:
 	// 특정 플레이어의 메뉴를 강제로 닫는 함수
 	void ForceCloseMenu(APlayerController* PC);
 };
-

@@ -141,6 +141,10 @@ void AInv_BuildingPreviewActor::SetPreviewMesh(UStaticMesh* InMesh, const FRotat
 
 	if (IsValid(CameraBoom))
 	{
+		// BP에서 설정한 카메라 붐 회전/오프셋 적용
+		CameraBoom->SetRelativeRotation(CameraBoomRotation);
+		CameraBoom->SocketOffset = CameraTargetOffset;
+
 		if (CameraDistance > 0.f)
 		{
 			CameraBoom->TargetArmLength = CameraDistance;

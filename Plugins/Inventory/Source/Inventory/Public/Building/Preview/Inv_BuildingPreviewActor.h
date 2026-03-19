@@ -63,32 +63,44 @@ public:
 	// 즉시 캡처 요청
 	void CaptureNow();
 
-private:
-	// ── 컴포넌트 ──
+protected:
+	// ── 컴포넌트 (BP에서 위치/회전 조정 가능) ──
 
-	UPROPERTY(VisibleAnywhere, Category = "건설|프리뷰", meta = (DisplayName = "씬 루트"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "건설|프리뷰", meta = (DisplayName = "씬 루트"))
 	TObjectPtr<USceneComponent> SceneRoot;
 
-	UPROPERTY(VisibleAnywhere, Category = "건설|프리뷰", meta = (DisplayName = "프리뷰 메시"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "건설|프리뷰", meta = (DisplayName = "프리뷰 메시"))
 	TObjectPtr<UStaticMeshComponent> PreviewMeshComponent;
 
-	UPROPERTY(VisibleAnywhere, Category = "건설|프리뷰", meta = (DisplayName = "카메라 붐"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "건설|프리뷰|카메라", meta = (DisplayName = "카메라 붐"))
 	TObjectPtr<USpringArmComponent> CameraBoom;
 
-	UPROPERTY(VisibleAnywhere, Category = "건설|프리뷰", meta = (DisplayName = "씬 캡처"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "건설|프리뷰|카메라", meta = (DisplayName = "씬 캡처"))
 	TObjectPtr<USceneCaptureComponent2D> SceneCapture;
 
-	UPROPERTY(VisibleAnywhere, Category = "건설|프리뷰", meta = (DisplayName = "프리뷰 조명"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "건설|프리뷰|조명", meta = (DisplayName = "프리뷰 조명 (Key)"))
 	TObjectPtr<USpotLightComponent> PreviewLight;
 
-	UPROPERTY(VisibleAnywhere, Category = "건설|프리뷰", meta = (DisplayName = "보조 조명"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "건설|프리뷰|조명", meta = (DisplayName = "보조 조명 (Fill)"))
 	TObjectPtr<UPointLightComponent> FillLight;
 
-	UPROPERTY(VisibleAnywhere, Category = "건설|프리뷰", meta = (DisplayName = "림 조명"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "건설|프리뷰|조명", meta = (DisplayName = "림 조명 (Rim)"))
 	TObjectPtr<UPointLightComponent> RimLight;
 
-	UPROPERTY(VisibleAnywhere, Category = "건설|프리뷰", meta = (DisplayName = "배경 차단 큐브"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "건설|프리뷰", meta = (DisplayName = "배경 차단 큐브"))
 	TObjectPtr<UStaticMeshComponent> BackdropCube;
+
+	// ── 카메라 붐 설정 (BP에서 조정 가능) ──
+
+	// 카메라 붐 회전 (프리뷰 카메라 각도)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "건설|프리뷰|카메라",
+		meta = (DisplayName = "카메라 붐 회전", Tooltip = "SpringArm의 회전. Pitch로 위/아래 각도, Yaw로 좌/우 회전 조정."))
+	FRotator CameraBoomRotation = FRotator(-20.f, 0.f, 0.f);
+
+	// 카메라 붐 소켓 오프셋 (프리뷰 메시 중심에서 카메라 타겟 이동)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "건설|프리뷰|카메라",
+		meta = (DisplayName = "카메라 타겟 오프셋", Tooltip = "SpringArm의 SocketOffset. 프리뷰 중심점을 미세 조정."))
+	FVector CameraTargetOffset = FVector::ZeroVector;
 
 	// ── BP 설정값 ──
 
