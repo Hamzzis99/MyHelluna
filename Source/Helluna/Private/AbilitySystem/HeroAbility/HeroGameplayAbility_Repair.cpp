@@ -34,9 +34,13 @@ void UHeroGameplayAbility_Repair::Repair(const FGameplayAbilityActorInfo* ActorI
 	if (!Hero->IsLocallyControlled()) return;
 
 	// F키 토글: Widget이 이미 열려있으면 닫기
-	if (CurrentWidget && CurrentWidget->IsInViewport())
+	const bool bIsInViewport = CurrentWidget && CurrentWidget->IsInViewport();
+	UE_LOG(LogTemp, Warning, TEXT("[Repair] Toggle detected, widget is in viewport: %s"),
+		bIsInViewport ? TEXT("true") : TEXT("false"));
+
+	if (bIsInViewport)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Repair] Widget already open, closing..."));
+		UE_LOG(LogTemp, Warning, TEXT("[Repair] Closing widget, InputMode -> GameOnly"));
 		if (URepairWidget* RepairWidget = Cast<URepairWidget>(CurrentWidget))
 		{
 			RepairWidget->CloseWidget();
@@ -49,7 +53,7 @@ void UHeroGameplayAbility_Repair::Repair(const FGameplayAbilityActorInfo* ActorI
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[Repair] Opening widget..."));
+	UE_LOG(LogTemp, Warning, TEXT("[Repair] Opening widget, InputMode -> GameAndUI"));
 
 	AHellunaDefenseGameState* GS = GetWorld()->GetGameState<AHellunaDefenseGameState>();
 	if (!GS) return;
@@ -88,8 +92,6 @@ void UHeroGameplayAbility_Repair::Repair(const FGameplayAbilityActorInfo* ActorI
 	CurrentWidget->AddToViewport(100);
 
 	PC->FlushPressedKeys();
-	PC->SetInputMode(FInputModeUIOnly());
+	PC->SetInputMode(FInputModeGameAndUI());
 	PC->bShowMouseCursor = true;
-
-	UE_LOG(LogTemp, Warning, TEXT("[Repair] Widget created and added to viewport."));
 }
