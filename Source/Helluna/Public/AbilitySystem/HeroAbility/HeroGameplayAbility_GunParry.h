@@ -238,6 +238,10 @@ private:
 	float SavedControlRotationYaw = 0.f;
 	bool bSavedUseControllerRotationYaw = true;
 
+	/** 패링 전 히어로 충돌 상태 저장 */
+	ECollisionEnabled::Type SavedHeroCapsuleCollision = ECollisionEnabled::QueryAndPhysics;
+	FName SavedHeroCapsuleProfile = NAME_None;
+
 	// ═══════════════════════════════════════════════════════════
 	// 카메라 스무스 진입 (InterpTo)
 	// ═══════════════════════════════════════════════════════════

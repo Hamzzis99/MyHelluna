@@ -459,6 +459,16 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		bSavedUseControllerRotationYaw = Hero->bUseControllerRotationYaw;
 		Hero->bUseControllerRotationYaw = false;
 
+		// ─── 히어로 캡슐 충돌 비활성화 — 패링 중 카메라 충돌 방지 ───
+		if (UCapsuleComponent* HeroCapsule = Hero->GetCapsuleComponent())
+		{
+			SavedHeroCapsuleCollision = HeroCapsule->GetCollisionEnabled();
+			SavedHeroCapsuleProfile = HeroCapsule->GetCollisionProfileName();
+			HeroCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 히어로 캡슐 NoCollision (이전: %s)"),
+				*UEnum::GetValueAsString(SavedHeroCapsuleCollision));
+		}
+
 		// ─── ControlRotation 세팅 — 서버+클라 공통 ───
 		if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
 		{
@@ -1118,10 +1128,16 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		Hero->PlayFullBody = false;
 		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] Hero.PlayFullBody = false"));
 
-		// [Fix: collision] 처형 종료 — 충돌 복원
-		if (UCapsuleComponent* Capsule = Hero->GetCapsuleComponent())
+		// [Fix: collision] 처형 종료 — 히어로 캡슐 충돌 복원
+		if (UCapsuleComponent* HeroCapsule = Hero->GetCapsuleComponent())
 		{
-			Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			HeroCapsule->SetCollisionEnabled(SavedHeroCapsuleCollision);
+			if (SavedHeroCapsuleProfile != NAME_None)
+			{
+				HeroCapsule->SetCollisionProfileName(SavedHeroCapsuleProfile);
+			}
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] 히어로 캡슐 충돌 복원: %s"),
+				*UEnum::GetValueAsString(SavedHeroCapsuleCollision));
 		}
 
 		// 이동+시점 잠금 즉시 해제 (Lock은 IsLocallyControlled에서만 호출되므로 Unlock도 동일)
@@ -1135,6 +1151,7 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 					PC->GetControlRotation().Yaw, Hero->bUseControllerRotationYaw ? TEXT("T") : TEXT("F"));
 			}
 
+			// [Reverted: yaw-snap 제거] 카메라 Yaw 유지 — CMC가 캐릭터를 카메라 방향으로 자연스럽게 맞춤
 			Hero->UnlockLookInput();
 			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
 
@@ -1148,8 +1165,9 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		// 서버(비로컬): bUseControllerRotationYaw + ControlRotation 원복
 		if (!Hero->IsLocallyControlled())
 		{
+			// [Reverted: yaw-snap 제거] SERVER도 카메라 Yaw 유지
 			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bUseControllerRotationYaw 원복 (Yaw 복원 없음)"));
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bUseControllerRotationYaw 원복"));
 		}
 
 		// 킬 VFX 종료 (PostProcess override 리셋)
@@ -1212,13 +1230,17 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 		{
 			UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] CLIENT: HandleExecutionFinished 미호출 → 카메라+잠금 원복"));
 			Hero->PlayFullBody = false;
-			if (UCapsuleComponent* Capsule = Hero->GetCapsuleComponent())
+			// 히어로 캡슐 충돌 복원
+			if (UCapsuleComponent* HeroCapsule = Hero->GetCapsuleComponent())
 			{
-				Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+				HeroCapsule->SetCollisionEnabled(SavedHeroCapsuleCollision);
+				if (SavedHeroCapsuleProfile != NAME_None)
+					HeroCapsule->SetCollisionProfileName(SavedHeroCapsuleProfile);
 			}
 			Hero->UnlockMoveInput();
 			if (Hero->IsLocallyControlled())
 			{
+				// [Reverted: yaw-snap 제거] 카메라 Yaw 유지
 				Hero->UnlockLookInput();
 				Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
 			}
@@ -2112,4 +2134,16 @@ void UHeroGameplayAbility_GunParry::ResetAllDynamicVFX(AHellunaHeroCharacter* He
 	bOrbitActive = false;
 	bDOFActive = false;
 	bDOFFadingOut = false;
+
+	// 히어로 캡슐 안전 복원 (이미 복원됐으면 중복 호출해도 무방)
+	if (UCapsuleComponent* HeroCapsule = Hero->GetCapsuleComponent())
+	{
+		if (HeroCapsule->GetCollisionEnabled() == ECollisionEnabled::NoCollision)
+		{
+			HeroCapsule->SetCollisionEnabled(SavedHeroCapsuleCollision);
+			if (SavedHeroCapsuleProfile != NAME_None)
+				HeroCapsule->SetCollisionProfileName(SavedHeroCapsuleProfile);
+			UE_LOG(LogGunParry, Warning, TEXT("[ResetAllDynamicVFX] 히어로 캡슐 안전 복원"));
+		}
+	}
 }
