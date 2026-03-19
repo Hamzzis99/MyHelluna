@@ -59,13 +59,13 @@ protected:
 	/** 패링 감지 범위 (cm) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Detection",
 		meta = (DisplayName = "감지 범위", ClampMin = "100.0", ClampMax = "1000.0",
-			ToolTip = "패링 가능한 적을 탐지하는 최대 거리 (cm). 이 범위 밖의 적은 패링 대상이 아님."))
+			ToolTip = "패링 감지 범위(cm). 이 범위 안의 적만 패링 대상."))
 	float ParryDetectionRange = 300.f;
 
 	/** 전방 반각 (도) — 이 각도 안에 있는 적만 패링 대상 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Detection",
 		meta = (DisplayName = "전방 반각(도)", ClampMin = "10.0", ClampMax = "180.0",
-			ToolTip = "플레이어 정면 기준 좌우 감지 각도. 60이면 정면 120도 범위. 180이면 전방위."))
+			ToolTip = "패링 감지 반각(도). 전방 이 각도 안의 적만 감지. 60=전방 120도."))
 	float ParryDetectionHalfAngle = 60.f;
 
 	/** Motion Warping 타겟 이름 */
@@ -76,25 +76,25 @@ protected:
 	/** 워프 시 히어로 원래 Z 높이 유지 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
 		meta = (DisplayName = "워프 시 원래 높이 유지",
-			ToolTip = "true면 워프 후 히어로의 원래 Z 높이를 유지. false면 적의 Z 높이로 이동."))
+			ToolTip = "워프 시 히어로 Z 좌표 유지. true면 높이 변화 없이 수평 이동만."))
 	bool bKeepHeroZOnWarp = true;
 
 	/** 워프 위치 Z 오프셋 (cm) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Execution",
 		meta = (DisplayName = "워프 Z 오프셋", ClampMin = "-200.0", ClampMax = "200.0",
-			ToolTip = "워프 위치의 Z축 추가 오프셋 (cm). 양수=위, 음수=아래."))
+			ToolTip = "워프 시 Z 오프셋(cm). bKeepHeroZOnWarp=true일 때 추가 높이 조절."))
 	float WarpZOffset = 0.f;
 
 	/** 처형 후 넉백 강도 */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|PostExecution",
 		meta = (DisplayName = "넉백 강도", ClampMin = "0.0", ClampMax = "2000.0",
-			ToolTip = "처형 완료 후 적을 밀어내는 힘. 0이면 넉백 없음."))
+			ToolTip = "처형 후 히어로 넉백 강도. 뒤로 밀리는 힘."))
 	float PostParryKnockbackStrength = 600.f;
 
 	/** 사후 무적 시간 (초) */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|PostExecution",
 		meta = (DisplayName = "사후 무적 시간(초)", ClampMin = "0.0", ClampMax = "5.0",
-			ToolTip = "처형 완료 후 무적 상태 유지 시간 (초)."))
+			ToolTip = "처형 후 히어로 무적 시간(초). 이 동안 데미지 면역."))
 	float PostParryInvincibleDuration = 1.0f;
 
 	// ═══════════════════════════════════════════════════════════

@@ -463,9 +463,9 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		{
 			SavedControlRotationYaw = PC->GetControlRotation().Yaw;
 
-			// 카메라를 캐릭터 정면/옆에 배치: WarpYaw + 180(정면) + YawOffset(미세조정)
+			// 카메라 Yaw: 워프 방향 기준 절대 오프셋 (0=회전없음, 180=정면, 210=정면옆)
 			FRotator CameraRotation = WarpRotation;
-			CameraRotation.Yaw += 180.f + CachedYawOffset;
+			CameraRotation.Yaw += CachedYawOffset;
 			CameraRotation.Pitch = 0.f;  // 카메라 기울어짐 방지
 
 			if (Hero->IsLocallyControlled())
