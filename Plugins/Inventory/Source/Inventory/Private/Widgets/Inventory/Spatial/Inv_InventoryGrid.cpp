@@ -2817,19 +2817,25 @@ void UInv_InventoryGrid::AddSlottedItemToCanvas(const int32 Index, const FInv_Gr
 	CanvasPanel->AddChild(SlottedItem);
 	UCanvasPanelSlot* CanvasSlot = UWidgetLayoutLibrary::SlotAsCanvasSlot(SlottedItem);
 
-	// R키 회전: 캔버스 슬롯 크기는 회전된 dimensions 사용 (레이아웃 반영)
-	const FIntPoint EffDim = GetEffectiveDimensions(GridFragment, bRotated);
 	const float IconTileWidth = TileSize - GridFragment->GetGridPadding() * 2;
-	const FVector2D EffDrawSize = FVector2D(EffDim) * IconTileWidth;
-	CanvasSlot->SetSize(EffDrawSize);
+	const FIntPoint OriginalSize = GridFragment->GetGridSize();
+
+	// 캔버스 슬롯 크기는 항상 원본 dimensions 사용 (Brush.ImageSize와 일치 → 찌그러짐 방지)
+	const FVector2D OrigDrawSize = FVector2D(OriginalSize) * IconTileWidth;
+	CanvasSlot->SetSize(OrigDrawSize);
 
 	const FVector2D DrawPos = UInv_WidgetUtils::GetPositionFromIndex(Index, Columns) * TileSize;
 	const FVector2D DrawPosWithPadding = DrawPos + FVector2D(GridFragment->GetGridPadding());
-	CanvasSlot->SetPosition(DrawPosWithPadding);
 
-	// R키 회전: 이미지를 시각적으로 90도 회전 (RenderTransform)
 	if (bRotated)
 	{
+		// RenderTransform 90° 회전 시 시각적 위치가 이동하므로 보정 오프셋 적용
+		// 원본 W×H 위젯을 중심(0.5, 0.5) 기준 90° 회전하면
+		// 시각적 좌상단이 ((H-W)/2, (W-H)/2) 만큼 이동함 → 반대로 보정
+		const float OffsetX = (OriginalSize.Y - OriginalSize.X) * IconTileWidth * 0.5f;
+		const float OffsetY = (OriginalSize.X - OriginalSize.Y) * IconTileWidth * 0.5f;
+		CanvasSlot->SetPosition(DrawPosWithPadding + FVector2D(OffsetX, OffsetY));
+
 		UImage* ImageIcon = SlottedItem->GetImageIcon();
 		if (IsValid(ImageIcon))
 		{
@@ -2839,6 +2845,8 @@ void UInv_InventoryGrid::AddSlottedItemToCanvas(const int32 Index, const FInv_Gr
 	}
 	else
 	{
+		CanvasSlot->SetPosition(DrawPosWithPadding);
+
 		UImage* ImageIcon = SlottedItem->GetImageIcon();
 		if (IsValid(ImageIcon))
 		{
@@ -4533,12 +4541,25 @@ bool UInv_InventoryGrid::MoveItemToPosition(const FGameplayTag& ItemType, const 
 		if (GridFragment)
 		{
 			ItemPadding = GridFragment->GetGridPadding();
-			// R키 회전: 캔버스 슬롯 크기도 회전된 dimensions로 설정
-			const float IconTileWidth = TileSize - ItemPadding * 2;
-			CanvasSlot->SetSize(FVector2D(Dimensions) * IconTileWidth);
+			// 캔버스 크기는 항상 원본 dimensions (Brush.ImageSize와 일치 → 찌그러짐 방지)
+			const FVector2D OrigDrawSize = GetDrawSize(GridFragment);
+			CanvasSlot->SetSize(OrigDrawSize);
 		}
 		const FVector2D DrawPosWithPadding = DrawPos + FVector2D(ItemPadding);
-		CanvasSlot->SetPosition(DrawPosWithPadding);
+
+		if (bItemRotated && GridFragment)
+		{
+			// RenderTransform 90° 보정 오프셋
+			const FIntPoint OrigSize = GridFragment->GetGridSize();
+			const float IconTileWidth = TileSize - ItemPadding * 2;
+			const float OffsetX = (OrigSize.Y - OrigSize.X) * IconTileWidth * 0.5f;
+			const float OffsetY = (OrigSize.X - OrigSize.Y) * IconTileWidth * 0.5f;
+			CanvasSlot->SetPosition(DrawPosWithPadding + FVector2D(OffsetX, OffsetY));
+		}
+		else
+		{
+			CanvasSlot->SetPosition(DrawPosWithPadding);
+		}
 	}
 
 #if INV_DEBUG_WIDGET
@@ -4709,11 +4730,24 @@ bool UInv_InventoryGrid::MoveItemByCurrentIndex(int32 CurrentIndex, const FIntPo
 			ItemPadding = GridFragment->GetGridPadding();
 		}
 		const FVector2D DrawPosWithPadding = DrawPos + FVector2D(ItemPadding);
-		CanvasSlot->SetPosition(DrawPosWithPadding);
 
-		// 회전 상태에 맞는 캔버스 크기 설정
-		const FVector2D RotatedDrawSize = GetDrawSizeRotated(GridFragment, bItemRotated);
-		CanvasSlot->SetSize(RotatedDrawSize);
+		// 캔버스 크기는 항상 원본 dimensions (Brush.ImageSize와 일치 → 찌그러짐 방지)
+		const FVector2D OrigDrawSize = GetDrawSize(GridFragment);
+		CanvasSlot->SetSize(OrigDrawSize);
+
+		if (bItemRotated && GridFragment)
+		{
+			// RenderTransform 90° 보정 오프셋
+			const FIntPoint OrigSize = GridFragment->GetGridSize();
+			const float IconTileWidth = TileSize - ItemPadding * 2;
+			const float OffsetX = (OrigSize.Y - OrigSize.X) * IconTileWidth * 0.5f;
+			const float OffsetY = (OrigSize.X - OrigSize.Y) * IconTileWidth * 0.5f;
+			CanvasSlot->SetPosition(DrawPosWithPadding + FVector2D(OffsetX, OffsetY));
+		}
+		else
+		{
+			CanvasSlot->SetPosition(DrawPosWithPadding);
+		}
 	}
 
 #if INV_DEBUG_WIDGET
