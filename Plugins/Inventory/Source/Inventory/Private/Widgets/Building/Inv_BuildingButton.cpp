@@ -250,18 +250,24 @@ void UInv_BuildingButton::ExecuteBuild()
 		return;
 	}
 
-	// CDO에서 데이터 추출하여 기존 인터페이스 호출
-	TSubclassOf<AActor> Ghost = CDO->GhostActorClass ? CDO->GhostActorClass : BuildableActorClass;
+	// CDO에서 데이터 추출하여 구조체로 전달
+	FInv_BuildingSelectionInfo Info;
+	Info.BuildingName = CDO->BuildingDisplayName;
+	Info.BuildingIcon = CDO->BuildingIcon;
+	Info.GhostClass = CDO->GhostActorClass ? CDO->GhostActorClass : (CDO->ActualBuildingClass ? CDO->ActualBuildingClass : BuildableActorClass);
+	Info.ActualBuildingClass = CDO->ActualBuildingClass ? CDO->ActualBuildingClass : BuildableActorClass;
+	Info.BuildingID = CDO->BuildingID;
+	Info.MaterialTag1 = CDO->RequiredMaterialTag1;
+	Info.MaterialAmount1 = CDO->RequiredAmount1;
+	Info.MaterialIcon1 = CDO->MaterialIcon1;
+	Info.MaterialTag2 = CDO->RequiredMaterialTag2;
+	Info.MaterialAmount2 = CDO->RequiredAmount2;
+	Info.MaterialIcon2 = CDO->MaterialIcon2;
+	Info.MaterialTag3 = CDO->RequiredMaterialTag3;
+	Info.MaterialAmount3 = CDO->RequiredAmount3;
+	Info.MaterialIcon3 = CDO->MaterialIcon3;
 
-	BuildingComp->OnBuildingSelectedFromWidget(
-		Ghost,
-		BuildableActorClass,
-		CDO->BuildingID,
-		CDO->RequiredMaterialTag1,
-		CDO->RequiredAmount1,
-		CDO->RequiredMaterialTag2,
-		CDO->RequiredAmount2
-	);
+	BuildingComp->OnBuildingSelectedFromWidget(Info);
 }
 
 void UInv_BuildingButton::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)

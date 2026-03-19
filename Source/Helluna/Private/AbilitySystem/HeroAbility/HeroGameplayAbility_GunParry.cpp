@@ -394,22 +394,25 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
 
-		// 카메라 정면 배치 — bUseControllerRotationYaw 비활성화 + ControlRotation = WarpYaw + 180 + YawOffset
-		if (Hero->IsLocallyControlled())
+		// ─── bUseControllerRotationYaw 비활성화 — 서버+클라 공통 ───
+		// CMC가 ControlRotation으로 ActorRotation을 덮어쓰는 것을 방지
+		// 서버에서도 비활성화해야 워프 회전이 CLIENT B에 정상 리플리케이션됨
+		bSavedUseControllerRotationYaw = Hero->bUseControllerRotationYaw;
+		Hero->bUseControllerRotationYaw = false;
+
+		// ─── ControlRotation 세팅 — 서버+클라 공통 ───
+		if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
 		{
-			// bUseControllerRotationYaw 저장 및 비활성화 (ActorRotation과 ControlRotation 분리)
-			bSavedUseControllerRotationYaw = Hero->bUseControllerRotationYaw;
-			Hero->bUseControllerRotationYaw = false;
+			SavedControlRotationYaw = PC->GetControlRotation().Yaw;
 
-			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+			// 카메라를 캐릭터 정면/옆에 배치: WarpYaw + 180(정면) + YawOffset(미세조정)
+			FRotator CameraRotation = WarpRotation;
+			CameraRotation.Yaw += 180.f + CachedYawOffset;
+			CameraRotation.Pitch = 0.f;  // 카메라 기울어짐 방지
+
+			if (Hero->IsLocallyControlled())
 			{
-				SavedControlRotationYaw = PC->GetControlRotation().Yaw;
-
-				// 카메라를 캐릭터 정면/옆에 배치: WarpYaw + 180(정면) + YawOffset(미세조정)
-				FRotator CameraRotation = WarpRotation;
-				CameraRotation.Yaw += 180.f + CachedYawOffset;
-				CameraRotation.Pitch = 0.f;  // 카메라 기울어짐 방지
-
+				// 로컬 클라이언트: 카메라 스무스 진입
 				if (CachedCameraEntryDuration <= 0.f)
 				{
 					// Duration=0 → 즉시 세팅 (기존 동작)
@@ -422,11 +425,11 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 					// 시간 기반 Lerp로 부드럽게 진입 (정확히 N초)
 					TargetCameraEntryRotation = CameraRotation;
 					StartCameraEntryRotation = PC->GetControlRotation();
-					
+
 					// [Fix: yaw-wrap] 최단 경로 Yaw 정규화 — 360도 넘는 긴 방향 회전 방지
 					float DeltaYaw = FRotator::NormalizeAxis(TargetCameraEntryRotation.Yaw - StartCameraEntryRotation.Yaw);
 					TargetCameraEntryRotation.Yaw = StartCameraEntryRotation.Yaw + DeltaYaw;
-					
+
 					CameraEntryElapsedTime = 0.f;
 					CameraEntryTickCount = 0;
 
@@ -478,6 +481,13 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 							EntryTickRate, true);
 					}
 				}
+			}
+			else
+			{
+				// 서버(비로컬): 즉시 ControlRotation 세팅 — 리플리케이션용
+				PC->SetControlRotation(CameraRotation);
+				UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] SERVER: ControlRotation 즉시 세팅 Yaw=%.1f (리플리케이션용)"),
+					CameraRotation.Yaw);
 			}
 		}
 		const float DistToEnemy = FVector::Dist(WarpLocation, EnemyLocation);
@@ -968,9 +978,19 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		else
 		{
 			// 서버/비로컬: 카메라 연출 없으므로 즉시 해제
+			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+
+			// 서버: ControlRotation 원래 값으로 복원
+			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+			{
+				FRotator Ctrl = PC->GetControlRotation();
+				Ctrl.Yaw = SavedControlRotationYaw;
+				PC->SetControlRotation(Ctrl);
+			}
+
 			Hero->UnlockMoveInput();
 			Hero->UnlockLookInput();
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 이동+시점 잠금 즉시 해제"));
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bUseControllerRotationYaw 원복 + ControlRotation 복원 + 잠금 해제"));
 		}
 	}
 
@@ -1037,6 +1057,18 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 		if (UWorld* World = GetWorld())
 		{
 			World->GetTimerManager().ClearTimer(CameraEntryTimerHandle);
+		}
+	}
+
+	// bUseControllerRotationYaw 안전 원복 — 서버에서 GA 취소 시 잠금 해제 보장
+	if (ActorInfo && ActorInfo->AvatarActor.IsValid())
+	{
+		if (AHellunaHeroCharacter* Hero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get()))
+		{
+			if (!Hero->IsLocallyControlled())
+			{
+				Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+			}
 		}
 	}
 

@@ -89,8 +89,14 @@ public:
 	// 고스트 액터 클래스 (None이면 이 액터 클래스 자체를 고스트로 사용)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "건설|고스트",
 		meta = (DisplayName = "고스트 액터 클래스",
-		Tooltip = "건설 미리보기 고스트. None이면 이 액터 클래스 자체를 반투명으로 표시."))
+		Tooltip = "건설 미리보기 고스트. None이면 실제 건물 클래스를 반투명으로 표시."))
 	TSubclassOf<AActor> GhostActorClass;
+
+	// 실제 건설 완료 시 스폰할 액터 클래스 (None이면 이 BuildableActor 자체를 스폰)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "건설|건물",
+		meta = (DisplayName = "실제 건물 액터 클래스",
+		Tooltip = "건설 완료 시 월드에 스폰할 액터. None이면 이 BuildableActor 자체를 스폰."))
+	TSubclassOf<AActor> ActualBuildingClass;
 
 	// === 재료 정보 (최대 3개) ===
 
