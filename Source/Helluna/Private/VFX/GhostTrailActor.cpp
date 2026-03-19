@@ -11,7 +11,10 @@ AGhostTrailActor::AGhostTrailActor()
 	GhostMesh = CreateDefaultSubobject<UPoseableMeshComponent>(TEXT("GhostMesh"));
 	SetRootComponent(GhostMesh);
 	GhostMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GhostMesh->SetGenerateOverlapEvents(false);
+	GhostMesh->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
 	GhostMesh->CastShadow = false;
+	GhostMesh->bReceivesDecals = false;
 
 	bReplicates = false;
 }
@@ -39,6 +42,7 @@ void AGhostTrailActor::Initialize(USkeletalMeshComponent* SourceMesh, UMaterialI
 			if (MID)
 			{
 				MID->SetScalarParameterValue(TEXT("Opacity"), InitialOpacity);
+				MID->SetScalarParameterValue(TEXT("EmissiveStrength"), 5.0f);
 				MID->SetVectorParameterValue(TEXT("GhostColor"), InGhostColor);
 				GhostMesh->SetMaterial(i, MID);
 				DynamicMaterials.Add(MID);

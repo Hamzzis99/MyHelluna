@@ -1231,8 +1231,13 @@ void AHellunaHeroCharacter::Multicast_SpawnParryGhostTrail_Implementation(
 	{
 		const float Alpha = (float)(i + 1) / (float)(Count + 1);
 		// 도착지(StartLocation)에서 출발지(EndLocation) 방향으로 잔상 배치 — 카메라 시야 안에 들어옴
-		const FVector TrailLoc = FMath::Lerp(StartLocation, EndLocation, Alpha * 0.4f);
-		const float OpacityMul = 1.f - Alpha * 0.4f;
+		FVector TrailLoc = FMath::Lerp(StartLocation, EndLocation, Alpha * 0.4f);
+		// [Fix: 공중 부유] 캐릭터 위치는 캡슐 중심이므로 메시 오프셋만큼 Z 보정
+		if (USkeletalMeshComponent* MyMesh = GetMesh())
+		{
+			TrailLoc.Z += MyMesh->GetRelativeLocation().Z;
+		}
+		const float OpacityMul = 1.f - Alpha * 0.3f;
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -1242,7 +1247,7 @@ void AHellunaHeroCharacter::Multicast_SpawnParryGhostTrail_Implementation(
 
 		if (Ghost)
 		{
-			Ghost->Initialize(HeroMesh, Mat, FadeDuration, 0.6f * OpacityMul, GhostColor);
+			Ghost->Initialize(HeroMesh, Mat, FadeDuration, 0.85f * OpacityMul, GhostColor);
 		}
 	}
 
