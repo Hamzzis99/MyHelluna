@@ -1120,22 +1120,9 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		if (Hero->IsLocallyControlled())
 		{
 			Hero->UnlockMoveInput();
-
-			// [Fix: yaw-restore] LookInput 해제 전에 ControlRotation.Yaw를 원래 값으로 복원
-			// 안 하면 처형 카메라 각도가 남아서 다음 패링 시 Yaw가 날뜀
-			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
-			{
-				FRotator RestoreCtrl = PC->GetControlRotation();
-				UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: ControlYaw 즉시 복원 %.1f → %.1f"),
-					RestoreCtrl.Yaw, SavedControlRotationYaw);
-				RestoreCtrl.Yaw = SavedControlRotationYaw;
-				PC->SetControlRotation(RestoreCtrl);
-			}
-
 			Hero->UnlockLookInput();
 			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: bUseControllerRotationYaw 즉시 원복=%s"),
-				bSavedUseControllerRotationYaw ? TEXT("true") : TEXT("false"));
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: LookInput 해제 + bUseControllerRotationYaw 원복 (Yaw 복원 없음 — 현재 방향 유지)"));
 		}
 
 		// 서버(비로컬): bUseControllerRotationYaw + ControlRotation 원복

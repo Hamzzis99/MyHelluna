@@ -36,6 +36,23 @@ void URepairWidget::NativeConstruct()
 
 void URepairWidget::NativeDestruct()
 {
+	if (Button_Confirm)
+	{
+		Button_Confirm->OnClicked.RemoveDynamic(this, &URepairWidget::OnConfirmClicked);
+	}
+	if (Button_Cancel)
+	{
+		Button_Cancel->OnClicked.RemoveDynamic(this, &URepairWidget::OnCancelClicked);
+	}
+	if (Slider_Material1)
+	{
+		Slider_Material1->OnValueChanged.RemoveDynamic(this, &URepairWidget::OnMaterial1SliderChanged);
+	}
+	if (Slider_Material2)
+	{
+		Slider_Material2->OnValueChanged.RemoveDynamic(this, &URepairWidget::OnMaterial2SliderChanged);
+	}
+
 	Super::NativeDestruct();
 }
 

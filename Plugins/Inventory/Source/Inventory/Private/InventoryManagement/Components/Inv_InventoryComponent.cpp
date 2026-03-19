@@ -2758,7 +2758,7 @@ void UInv_InventoryComponent::Server_SplitItemEntry_Implementation(UInv_Inventor
 
 bool UInv_InventoryComponent::Server_UpdateItemGridPosition_Validate(UInv_InventoryItem* Item, int32 GridIndex, uint8 GridCategory, bool bRotated)
 {
-	return GridIndex >= INDEX_NONE && GridCategory <= 2;
+	return GridIndex >= INDEX_NONE && GridIndex < InvValidation::MaxGridIndex && GridCategory <= 2;
 }
 
 bool UInv_InventoryComponent::ApplyItemGridPositionSync(UInv_InventoryItem* Item, int32 GridIndex, uint8 GridCategory, bool bRotated)
@@ -3914,7 +3914,8 @@ bool UInv_InventoryComponent::Server_TakeItemFromContainer_Validate(
 	int32 ContainerEntryIndex,
 	int32 TargetGridIndex)
 {
-	return ContainerEntryIndex >= 0;
+	return ContainerEntryIndex >= 0 && ContainerEntryIndex < InvValidation::MaxEntryIndex
+		&& (TargetGridIndex == INDEX_NONE || (TargetGridIndex >= 0 && TargetGridIndex < InvValidation::MaxGridIndex));
 }
 
 void UInv_InventoryComponent::Server_TakeItemFromContainer_Implementation(
@@ -4012,7 +4013,8 @@ bool UInv_InventoryComponent::Server_PutItemInContainer_Validate(
 	int32 PlayerEntryIndex,
 	int32 TargetGridIndex)
 {
-	return PlayerEntryIndex >= 0;
+	return PlayerEntryIndex >= 0 && PlayerEntryIndex < InvValidation::MaxEntryIndex
+		&& (TargetGridIndex == INDEX_NONE || (TargetGridIndex >= 0 && TargetGridIndex < InvValidation::MaxGridIndex));
 }
 
 void UInv_InventoryComponent::Server_PutItemInContainer_Implementation(
