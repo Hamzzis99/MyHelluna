@@ -200,6 +200,7 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 
 	bHandleExecutionFinishedCalled = false;
 	bKillProcessed = false;
+	bEnemyCleanedUp = false;
 	ParryFireEventTask = nullptr;
 
 	AHellunaHeroCharacter* Hero = GetHeroCharacterFromActorInfo();
@@ -921,6 +922,39 @@ void UHeroGameplayAbility_GunParry::ProcessExecutionKill(bool bIsFallback)
 	TryDespawnMassEntitySafely(Enemy, DespawnWhere);
 
 	bKillProcessed = true;
+
+	// [래그돌 즉시 발동] 킬 시점에 적 정리 (서버에서만)
+	if (Enemy && Hero->HasAuthority())
+	{
+		if (bCachedParryRagdollDeath)
+		{
+			FVector ImpulseDir = (Enemy->GetActorLocation() - Hero->GetActorLocation()).GetSafeNormal();
+			ImpulseDir.Z = CachedParryRagdollUpwardRatio;
+			ImpulseDir.Normalize();
+			const FVector Impulse = ImpulseDir * CachedParryRagdollImpulse;
+			const FVector ImpulseLocation = Enemy->GetMesh() ? Enemy->GetMesh()->GetComponentLocation() : Enemy->GetActorLocation();
+
+			Enemy->Multicast_ActivateRagdoll(Impulse, ImpulseLocation);
+			Enemy->SetLifeSpan(CachedParryRagdollLifeSpan);
+
+			UE_LOG(LogGunParry, Warning, TEXT("[ProcessExecutionKill] 래그돌 즉시 발동 — Impulse=%.0f, LifeSpan=%.1f"),
+				CachedParryRagdollImpulse, CachedParryRagdollLifeSpan);
+		}
+		else
+		{
+			Enemy->SetLifeSpan(0.5f);
+			UE_LOG(LogGunParry, Warning, TEXT("[ProcessExecutionKill] bParryRagdollDeath=false — 기존 사망 처리"));
+		}
+
+		// AnimLocked 해제 + 이동 잠금 해제
+		if (UHellunaAbilitySystemComponent* EnemyASC = Enemy->GetHellunaAbilitySystemComponent())
+		{
+			EnemyASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_AnimLocked);
+		}
+		Enemy->UnlockMovement();
+
+		bEnemyCleanedUp = true;
+	}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1010,39 +1044,23 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bCancelled=true → 킬 미처리, 정리만 수행"));
 		}
 
-		if (Enemy && bKillProcessed)
+		// 적 정리 — ProcessExecutionKill에서 이미 처리했으면 스킵
+		if (Enemy && !bEnemyCleanedUp)
 		{
-			if (bCachedParryRagdollDeath)
-			{
-				// 래그돌 사망: 임펄스 방향 = 히어로 → 적 (처형 방향으로 날려보냄)
-				FVector ImpulseDir = (Enemy->GetActorLocation() - Hero->GetActorLocation()).GetSafeNormal();
-				ImpulseDir.Z = CachedParryRagdollUpwardRatio;
-				ImpulseDir.Normalize();
-				const FVector Impulse = ImpulseDir * CachedParryRagdollImpulse;
-				const FVector ImpulseLocation = Enemy->GetMesh() ? Enemy->GetMesh()->GetComponentLocation() : Enemy->GetActorLocation();
-
-				Enemy->Multicast_ActivateRagdoll(Impulse, ImpulseLocation);
-				Enemy->SetLifeSpan(CachedParryRagdollLifeSpan);
-
-				UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 래그돌 Multicast 호출 — Impulse=%.0f, UpRatio=%.1f, LifeSpan=%.1f"),
-					CachedParryRagdollImpulse, CachedParryRagdollUpwardRatio, CachedParryRagdollLifeSpan);
-			}
-			else
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bEnemyCleanedUp=false → 적 정리 폴백 실행"));
+			if (bKillProcessed)
 			{
 				Enemy->SetLifeSpan(0.5f);
-				UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bParryRagdollDeath=false — 기존 사망 처리 SetLifeSpan(0.5)"));
 			}
-		}
-
-		// 적 AnimLocked 해제 (서버 태그이므로 서버에서만)
-		if (Enemy)
-		{
 			if (UHellunaAbilitySystemComponent* EnemyASC = Enemy->GetHellunaAbilitySystemComponent())
 			{
 				EnemyASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_AnimLocked);
 			}
 			Enemy->UnlockMovement();
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: Enemy AnimLocked 해제"));
+		}
+		else if (bEnemyCleanedUp)
+		{
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bEnemyCleanedUp=true → 적 정리 스킵 (노티파이에서 완료)"));
 		}
 
 		// 플레이어 서버 태그 정리
@@ -1102,6 +1120,18 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		if (Hero->IsLocallyControlled())
 		{
 			Hero->UnlockMoveInput();
+
+			// [Fix: yaw-restore] LookInput 해제 전에 ControlRotation.Yaw를 원래 값으로 복원
+			// 안 하면 처형 카메라 각도가 남아서 다음 패링 시 Yaw가 날뜀
+			if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+			{
+				FRotator RestoreCtrl = PC->GetControlRotation();
+				UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: ControlYaw 즉시 복원 %.1f → %.1f"),
+					RestoreCtrl.Yaw, SavedControlRotationYaw);
+				RestoreCtrl.Yaw = SavedControlRotationYaw;
+				PC->SetControlRotation(RestoreCtrl);
+			}
+
 			Hero->UnlockLookInput();
 			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
 			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: bUseControllerRotationYaw 즉시 원복=%s"),
@@ -1188,6 +1218,13 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 			Hero->UnlockMoveInput();
 			if (Hero->IsLocallyControlled())
 			{
+				// [Fix: yaw-restore] EndAbility 폴백에서도 Yaw 복원
+				if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+				{
+					FRotator RestoreCtrl = PC->GetControlRotation();
+					RestoreCtrl.Yaw = SavedControlRotationYaw;
+					PC->SetControlRotation(RestoreCtrl);
+				}
 				Hero->UnlockLookInput();
 				Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
 			}
@@ -1264,6 +1301,7 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 
 	bHandleExecutionFinishedCalled = false;
 	bKillProcessed = false;
+	bEnemyCleanedUp = false;
 	ExecutionMontageTask = nullptr;
 	ParryFireEventTask = nullptr;
 	CachedExecutionMontage = nullptr;

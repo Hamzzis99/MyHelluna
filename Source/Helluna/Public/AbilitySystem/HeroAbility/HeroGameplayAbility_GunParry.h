@@ -206,6 +206,9 @@ private:
 	/** 총 발사 프레임 킬/셰이크 처리 완료 여부 */
 	bool bKillProcessed = false;
 
+	/** ProcessExecutionKill에서 적 정리(래그돌/AnimLocked/LifeSpan) 완료 여부 */
+	bool bEnemyCleanedUp = false;
+
 	/** 카메라 연출 전 원래 값 저장 */
 	float SavedArmLength = 0.f;
 	float SavedFOV = 0.f;
