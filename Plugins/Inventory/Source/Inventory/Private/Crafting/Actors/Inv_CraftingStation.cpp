@@ -4,6 +4,7 @@
 #include "Inventory.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/StaticMeshComponent.h"
+#include "Widgets/Crafting/Inv_TabbedCraftingMenu.h"
 
 AInv_CraftingStation::AInv_CraftingStation()
 {
@@ -58,7 +59,15 @@ void AInv_CraftingStation::OnInteract_Implementation(APlayerController* PlayerCo
 	if (IsValid(NewMenu))
 	{
 		NewMenu->AddToViewport();
-		
+
+		// 탭형 크래프팅 메뉴인 경우 레시피 데이터 초기화
+		// AddToViewport 이후 호출 (NativeConstruct에서 델리게이트 바인딩 완료 후)
+		// 기존 CraftingMenu는 Cast 실패로 무시됨
+		if (UInv_TabbedCraftingMenu* TabbedMenu = Cast<UInv_TabbedCraftingMenu>(NewMenu))
+		{
+			TabbedMenu->InitializeWithRecipes(CraftingRecipeData);
+		}
+
 		// 입력 모드를 UI로 변경
 		FInputModeGameAndUI InputMode;
 		InputMode.SetWidgetToFocus(NewMenu->TakeWidget());

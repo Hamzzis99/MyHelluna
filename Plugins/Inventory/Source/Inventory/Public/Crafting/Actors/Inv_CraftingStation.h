@@ -8,6 +8,7 @@
 #include "Inv_CraftingStation.generated.h"
 
 class UUserWidget;
+class UInv_CraftingRecipeDA;
 
 /**
  * 크래프팅 스테이션 베이스 액터
@@ -46,6 +47,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "제작",
 		meta = (DisplayName = "상호작용 메시지", Tooltip = "플레이어가 가까이 갔을 때 화면에 표시되는 상호작용 안내 메시지입니다."))
 	FString PickupMessage = "E - Craft";
+
+	// 크래프팅 레시피 데이터 (탭형 크래프팅 메뉴용)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "제작",
+		meta = (DisplayName = "크래프팅 레시피 데이터", Tooltip = "탭형 크래프팅 메뉴에서 사용할 레시피 DataAsset입니다."))
+	TObjectPtr<UInv_CraftingRecipeDA> CraftingRecipeData;
 
 	// 상호작용 가능 거리
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "제작",
