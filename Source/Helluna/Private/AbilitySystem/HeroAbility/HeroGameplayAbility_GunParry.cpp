@@ -958,18 +958,20 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 			Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		}
 
-		Hero->UnlockMoveInput();
-		// [Fix: sensitivity] 처형 끝나면 즉시 시점 잠금 해제 — 마우스 즉시 사용 가능
 		if (Hero->IsLocallyControlled())
 		{
-			Hero->UnlockLookInput();
-			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: bUseControllerRotationYaw 즉시 원복=%s"),
-				bSavedUseControllerRotationYaw ? TEXT("true") : TEXT("false"));
+			// 로컬 클라이언트: 카메라 복귀 완료까지 이동+시점 잠금 유지
+			// EndCameraEffect 람다 완료 시 MoveInput/LookInput/bUseControllerRotationYaw 해제
+			EndCameraEffect(Hero);
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: 카메라 복귀 완료까지 이동+시점 잠금 유지"));
 		}
-		EndCameraEffect(Hero);
-		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s: 이동+시점 잠금 즉시 해제 + 카메라 복귀 시작"),
-			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
+		else
+		{
+			// 서버/비로컬: 카메라 연출 없으므로 즉시 해제
+			Hero->UnlockMoveInput();
+			Hero->UnlockLookInput();
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 이동+시점 잠금 즉시 해제"));
+		}
 	}
 
 	ParryTarget = nullptr;
@@ -1317,6 +1319,7 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 		if (UCameraComponent* Camera = Hero->GetFollowCamera())
 			Camera->SetFieldOfView(SavedFOV);
 		Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+		Hero->UnlockMoveInput();
 		Hero->UnlockLookInput();
 		return;
 	}
@@ -1365,6 +1368,7 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 			if (WeakHero.IsValid())
 			{
 				WeakHero->bUseControllerRotationYaw = bSavedUseCtrlYaw;
+				WeakHero->UnlockMoveInput();
 				WeakHero->UnlockLookInput();
 			}
 			if (WeakWorld.IsValid() && TimerHandle.IsValid())
@@ -1439,10 +1443,11 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 				WeakPC->SetControlRotation(FinalCtrl);
 			}
 
-			// bUseControllerRotationYaw 복원 + LookInput 해제
+			// bUseControllerRotationYaw 복원 + 이동/시점 잠금 해제 (카메라 복귀 완료)
 			if (WeakHero.IsValid())
 			{
 				WeakHero->bUseControllerRotationYaw = bSavedUseCtrlYaw;
+				WeakHero->UnlockMoveInput();
 				WeakHero->UnlockLookInput();
 			}
 
