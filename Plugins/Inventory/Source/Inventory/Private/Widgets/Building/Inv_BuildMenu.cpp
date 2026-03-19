@@ -72,9 +72,9 @@ void UInv_BuildMenu::NativeOnInitialized()
 	}
 
 	// === 디테일 패널 초기화 ===
-	if (IsValid(Panel_Detail))
+	if (IsValid(Overlay_Detail))
 	{
-		Panel_Detail->SetVisibility(ESlateVisibility::Collapsed);
+		Overlay_Detail->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	if (IsValid(Button_Build))
@@ -223,9 +223,9 @@ void UInv_BuildMenu::OpenDetailPanel(UInv_BuildingButton* BuildingButton)
 	SelectedBuildingButton = BuildingButton;
 
 	// 패널 보이기
-	if (IsValid(Panel_Detail))
+	if (IsValid(Overlay_Detail))
 	{
-		Panel_Detail->SetVisibility(ESlateVisibility::Visible);
+		Overlay_Detail->SetVisibility(ESlateVisibility::Visible);
 	}
 
 	// 건설물 이름
@@ -255,9 +255,9 @@ void UInv_BuildMenu::CloseDetailPanel()
 {
 	CleanupBuildingPreview();
 
-	if (IsValid(Panel_Detail))
+	if (IsValid(Overlay_Detail))
 	{
-		Panel_Detail->SetVisibility(ESlateVisibility::Collapsed);
+		Overlay_Detail->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	SelectedBuildingButton.Reset();

@@ -12,6 +12,7 @@ class UWidgetSwitcher;
 class UWrapBox;
 class UButton;
 class UCanvasPanel;
+class UOverlay;
 class UImage;
 class UTextBlock;
 class UVerticalBox;
@@ -109,9 +110,9 @@ private:
 
 	// === 블루프린트에서 바인딩할 위젯들 — 디테일 패널 ===
 
-	// 디테일 패널 컨테이너 (Collapsed 기본)
+	// 디테일 패널 래퍼 (배경 + 콘텐츠, Collapsed 기본, Overlay 하단에 배치)
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UCanvasPanel> Panel_Detail;
+	TObjectPtr<UOverlay> Overlay_Detail;
 
 	// 3D 프리뷰 표시
 	UPROPERTY(meta = (BindWidgetOptional))
