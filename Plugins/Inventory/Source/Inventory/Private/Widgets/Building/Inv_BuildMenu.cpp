@@ -8,6 +8,7 @@
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/Image.h"
+#include "Components/Overlay.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Widgets/Building/Inv_BuildingButton.h"
@@ -98,8 +99,9 @@ void UInv_BuildMenu::NativeOnInitialized()
 	ShowSupport();
 
 	// === 초기화 완료 로그 ===
-	UE_LOG(LogTemp, Warning, TEXT("[BuildMenu] 초기화 완료: Switcher=%s, 탭 버튼 3개 바인딩"),
-		IsValid(Switcher) ? TEXT("Valid") : TEXT("NULL"));
+	UE_LOG(LogTemp, Warning, TEXT("[BuildMenu] 초기화 완료: Switcher=%s, Overlay_Detail=%s, 탭 버튼 3개 바인딩"),
+		IsValid(Switcher) ? TEXT("Valid") : TEXT("NULL"),
+		IsValid(Overlay_Detail) ? TEXT("Valid") : TEXT("NULL"));
 }
 
 void UInv_BuildMenu::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
