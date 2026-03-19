@@ -31,6 +31,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Persistence/Inv_SaveGameMode.h"  // [최적화] FindItemComponentTemplate 사용
 #include "Player/Inv_PlayerController.h"  // FInv_SavedItemData 사용
+#include "Blueprint/WidgetBlueprintLibrary.h"  // CloseOtherMenus에서 CraftingMenu 검색용
 
 // ════════════════════════════════════════════════════════════════════════════════
 // 📌 IsListenServerOrStandalone
@@ -2578,6 +2579,9 @@ void UInv_InventoryComponent::OpenInventoryMenu()
 {
 	if (!IsValid(InventoryMenu)) return;
 
+	// 방안 B: 다른 위젯(BuildMenu, CraftingMenu) 열려있으면 먼저 닫기
+	CloseOtherMenus();
+
 	InventoryMenu->SetVisibility(ESlateVisibility::Visible);
 	bInventoryMenuOpen = true;
 
@@ -2615,11 +2619,24 @@ void UInv_InventoryComponent::CloseOtherMenus()
 	{
 		BuildingComp->CloseBuildMenu();
 #if INV_DEBUG_INVENTORY
-		UE_LOG(LogTemp, Log, TEXT("인벤토리 닫힘: BuildMenu도 함께 닫힘"));
+		UE_LOG(LogTemp, Log, TEXT("CloseOtherMenus: BuildMenu 닫힘"));
 #endif
 	}
 
-	// CraftingMenu는 거리 체크로 자동으로 닫힘 (Timer 방식)
+	// CraftingMenu 닫기 (위젯 검색 방식)
+	TArray<UUserWidget*> FoundWidgets;
+	UWidgetBlueprintLibrary::GetAllWidgetsOfClass(GetWorld(), FoundWidgets, UUserWidget::StaticClass(), false);
+	for (UUserWidget* Widget : FoundWidgets)
+	{
+		if (!IsValid(Widget)) continue;
+		if (Widget->GetClass()->GetName().Contains(TEXT("CraftingMenu")))
+		{
+			Widget->RemoveFromParent();
+#if INV_DEBUG_INVENTORY
+			UE_LOG(LogTemp, Log, TEXT("CloseOtherMenus: CraftingMenu 닫힘: %s"), *Widget->GetClass()->GetName());
+#endif
+		}
+	}
 }
 
 // ⭐ InventoryList 기반 공간 체크 (서버 전용, UI 없이 작동!)

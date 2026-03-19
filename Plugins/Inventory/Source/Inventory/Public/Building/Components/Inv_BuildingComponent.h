@@ -86,6 +86,9 @@ public:
 	// 빌드 메뉴 닫기 (외부에서 호출 가능 - 인벤토리 닫을 때 사용)
 	void CloseBuildMenu();
 
+	// 빌드 메뉴 열림 여부 (CraftingStation의 ForceCloseMenu에서 사용)
+	bool IsBuildMenuOpen() const { return IsValid(BuildMenuInstance); }
+
 private:
 	// 빌드 모드 시작/종료 함수
 	void StartBuildMode();

@@ -314,6 +314,13 @@ void UInv_BuildingComponent::OpenBuildMenu()
 	UE_LOG(LogTemp, Warning, TEXT("=== OPENING BUILD MENU ==="));
 #endif
 
+	// 방안 B: 인벤토리 열려있으면 닫기
+	UInv_InventoryComponent* InvComp = OwningPC->FindComponentByClass<UInv_InventoryComponent>();
+	if (IsValid(InvComp) && InvComp->IsMenuOpen())
+	{
+		InvComp->ToggleInventoryMenu();
+	}
+
 	// Crafting Menu가 열려있으면 닫기
 	CloseCraftingMenuIfOpen();
 

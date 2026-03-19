@@ -5,6 +5,8 @@
 #include "Blueprint/UserWidget.h"
 #include "Components/StaticMeshComponent.h"
 #include "Widgets/Crafting/Inv_TabbedCraftingMenu.h"
+#include "InventoryManagement/Components/Inv_InventoryComponent.h"
+#include "Building/Components/Inv_BuildingComponent.h"
 
 AInv_CraftingStation::AInv_CraftingStation()
 {
@@ -52,6 +54,18 @@ void AInv_CraftingStation::OnInteract_Implementation(APlayerController* PlayerCo
 		UE_LOG(LogTemp, Log, TEXT("크래프팅 메뉴 닫힘 (Player: %s)"), *PlayerController->GetName());
 #endif
 		return;
+	}
+
+	// 방안 B: 다른 위젯(Inventory, BuildMenu) 열려있으면 먼저 닫기
+	UInv_InventoryComponent* InvComp = PlayerController->FindComponentByClass<UInv_InventoryComponent>();
+	if (IsValid(InvComp) && InvComp->IsMenuOpen())
+	{
+		InvComp->ToggleInventoryMenu();
+	}
+	UInv_BuildingComponent* BuildComp = PlayerController->FindComponentByClass<UInv_BuildingComponent>();
+	if (IsValid(BuildComp))
+	{
+		BuildComp->CloseBuildMenu();
 	}
 
 	// 크래프팅 메뉴 생성 및 표시
@@ -185,10 +199,20 @@ void AInv_CraftingStation::ForceCloseMenu(APlayerController* PC)
 		PlayerMenuMap.Remove(PC);
 	}
 
-	// 입력 모드 복구
-	FInputModeGameOnly InputMode;
-	PC->SetInputMode(InputMode);
-	PC->SetShowMouseCursor(false);
+	// 방안 B: 다른 위젯이 열려있으면 입력 모드 변경 안 함
+	bool bOtherMenuOpen = false;
+	UInv_InventoryComponent* InvComp = PC->FindComponentByClass<UInv_InventoryComponent>();
+	if (IsValid(InvComp) && InvComp->IsMenuOpen()) bOtherMenuOpen = true;
+	UInv_BuildingComponent* BuildComp = PC->FindComponentByClass<UInv_BuildingComponent>();
+	if (IsValid(BuildComp) && BuildComp->IsBuildMenuOpen()) bOtherMenuOpen = true;
+
+	if (!bOtherMenuOpen)
+	{
+		// 입력 모드 복구
+		FInputModeGameOnly InputMode;
+		PC->SetInputMode(InputMode);
+		PC->SetShowMouseCursor(false);
+	}
 
 	// Timer 정지
 	if (PlayerTimerMap.Contains(PC))
@@ -198,6 +222,7 @@ void AInv_CraftingStation::ForceCloseMenu(APlayerController* PC)
 	}
 
 #if INV_DEBUG_CRAFT
-	UE_LOG(LogTemp, Log, TEXT("크래프팅 메뉴 강제 닫힘. Timer 정지됨. (Player: %s)"), *PC->GetName());
+	UE_LOG(LogTemp, Log, TEXT("크래프팅 메뉴 강제 닫힘. Timer 정지됨. bOtherMenuOpen=%s (Player: %s)"),
+		bOtherMenuOpen ? TEXT("TRUE") : TEXT("FALSE"), *PC->GetName());
 #endif
 }
