@@ -2,6 +2,7 @@
 
 #include "Character/HellunaEnemyCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Conponent/EnemyCombatComponent.h"
 #include "Engine/AssetManager.h"
 #include "DataAsset/DataAsset_EnemyStartUpData.h"
@@ -266,6 +267,50 @@ void AHellunaEnemyCharacter::Multicast_PlayParryVictim_Implementation()
 	if (!AnimInst) return;
 
 	AnimInst->Montage_Play(ParryVictimMontage, 1.0f);
+}
+
+// ============================================================
+// Multicast_ActivateRagdoll — 래그돌 전환 + 임펄스 (모든 클라이언트)
+// ============================================================
+void AHellunaEnemyCharacter::Multicast_ActivateRagdoll_Implementation(
+	FVector Impulse, FVector ImpulseLocation)
+{
+	// 데디케이티드 서버에서는 시각적 래그돌 불필요
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	USkeletalMeshComponent* EnemyMesh = GetMesh();
+	if (!EnemyMesh) return;
+
+	// 몽타주 중단 (래그돌 전환 전에)
+	if (UAnimInstance* AnimInst = EnemyMesh->GetAnimInstance())
+	{
+		AnimInst->StopAllMontages(0.f);
+	}
+
+	// 캡슐 충돌 비활성화 (래그돌이 캡슐과 충돌하면 튀어오름)
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// 이동 비활성화
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->DisableMovement();
+		MoveComp->StopMovementImmediately();
+	}
+
+	// 래그돌 활성화
+	EnemyMesh->SetCollisionProfileName(TEXT("Ragdoll"));
+	EnemyMesh->SetAllBodiesSimulatePhysics(true);
+	EnemyMesh->SetSimulatePhysics(true);
+	EnemyMesh->WakeAllRigidBodies();
+
+	// 임펄스 적용 (처형 방향으로 날려보내기)
+	EnemyMesh->AddImpulseAtLocation(Impulse, ImpulseLocation);
+
+	UE_LOG(LogGunParry, Warning, TEXT("[Ragdoll] 래그돌 활성화 — Impulse=%s"),
+		*Impulse.ToString());
 }
 
 // ============================================================

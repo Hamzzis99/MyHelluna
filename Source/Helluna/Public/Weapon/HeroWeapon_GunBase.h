@@ -391,6 +391,38 @@ public:
 			ToolTip = "처형 중 카메라가 최대로 회전하는 각도. 15=미세한 움직임, 30=뚜렷한 공전."))
 	float ExecutionOrbitTotalAngle = 15.f;
 
+	// ═══════════════════════════════════════════════════════════
+	// 건패링 래그돌 사망
+	// ═══════════════════════════════════════════════════════════
+
+	/** 처형 후 적 래그돌 활성화 여부 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Death",
+		meta = (DisplayName = "래그돌 사망",
+			EditCondition = "bCanParry", EditConditionHides,
+			ToolTip = "처형 후 적이 래그돌로 전환되어 날아감. false면 기존처럼 즉시 사라짐."))
+	bool bParryRagdollDeath = true;
+
+	/** 래그돌 임펄스 강도 — 적이 날아가는 힘 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Death",
+		meta = (DisplayName = "래그돌 임펄스", ClampMin = "0.0", ClampMax = "50000.0",
+			EditCondition = "bCanParry && bParryRagdollDeath", EditConditionHides,
+			ToolTip = "래그돌 임펄스 강도. 권총=5000 추천. 샷건=15000."))
+	float ParryRagdollImpulse = 5000.f;
+
+	/** 래그돌 위쪽 임펄스 비율 — 살짝 띄우는 정도 (0=수평, 1=45도) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Death",
+		meta = (DisplayName = "래그돌 위쪽 비율", ClampMin = "0.0", ClampMax = "1.0",
+			EditCondition = "bCanParry && bParryRagdollDeath", EditConditionHides,
+			ToolTip = "래그돌 위쪽 힘 비율. 0이면 수평으로 날아감, 0.3이면 살짝 위로."))
+	float ParryRagdollUpwardRatio = 0.3f;
+
+	/** 래그돌 유지 시간 — 이 시간 후 사라짐 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Parry|Death",
+		meta = (DisplayName = "래그돌 유지 시간(초)", ClampMin = "0.5", ClampMax = "10.0",
+			EditCondition = "bCanParry && bParryRagdollDeath", EditConditionHides,
+			ToolTip = "래그돌 상태 유지 시간(초). 이후 사라짐. 권총=3.0 추천."))
+	float ParryRagdollLifeSpan = 3.0f;
+
 protected:
 
 	virtual void BeginPlay() override;

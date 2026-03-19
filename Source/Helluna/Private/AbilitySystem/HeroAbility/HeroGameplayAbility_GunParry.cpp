@@ -272,6 +272,19 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 			}
 		}
 
+		// 적 캡슐 충돌 비활성화 — 카메라가 적 캡슐과 충돌해서 하늘로 튀는 거 방지
+		if (UCapsuleComponent* EnemyCapsule = Enemy->GetCapsuleComponent())
+		{
+			EnemyCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+		// 적 이동 비활성화
+		if (UCharacterMovementComponent* EnemyMove = Enemy->GetCharacterMovement())
+		{
+			EnemyMove->DisableMovement();
+			EnemyMove->StopMovementImmediately();
+		}
+		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] SERVER: Enemy 캡슐+이동 비활성화"));
+
 		// 적 진행 중인 몽타주 전부 중단 (공격 모션 멈추기)
 		if (UAnimInstance* EnemyAnim = Enemy->GetMesh()->GetAnimInstance())
 		{
@@ -334,6 +347,12 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		CachedDOFTransitionDuration = Weapon->ExecutionDOFTransitionDuration;
 		CachedOrbitSpeed = Weapon->ExecutionOrbitSpeed;
 		CachedOrbitTotalAngle = Weapon->ExecutionOrbitTotalAngle;
+
+		// Ragdoll 캐싱
+		bCachedParryRagdollDeath = Weapon->bParryRagdollDeath;
+		CachedParryRagdollImpulse = Weapon->ParryRagdollImpulse;
+		CachedParryRagdollUpwardRatio = Weapon->ParryRagdollUpwardRatio;
+		CachedParryRagdollLifeSpan = Weapon->ParryRagdollLifeSpan;
 
 		UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 무기 카메라 설정: Weapon=%s, ArmMul=%.2f, FOVMul=%.2f, YawOffset=%.1f, WarpAngle=%.1f, ExecDist=%.0f, Shake=%s, ShakeScale=%.1f"),
 			*Weapon->GetName(), CachedArmLengthMul, CachedFOVMul, CachedYawOffset, CachedWarpAngleOffset, CachedExecutionDistance,
@@ -993,8 +1012,26 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 
 		if (Enemy && bKillProcessed)
 		{
-			Enemy->SetLifeSpan(0.5f);
-			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: SetLifeSpan(0.5)"));
+			if (bCachedParryRagdollDeath)
+			{
+				// 래그돌 사망: 임펄스 방향 = 히어로 → 적 (처형 방향으로 날려보냄)
+				FVector ImpulseDir = (Enemy->GetActorLocation() - Hero->GetActorLocation()).GetSafeNormal();
+				ImpulseDir.Z = CachedParryRagdollUpwardRatio;
+				ImpulseDir.Normalize();
+				const FVector Impulse = ImpulseDir * CachedParryRagdollImpulse;
+				const FVector ImpulseLocation = Enemy->GetMesh() ? Enemy->GetMesh()->GetComponentLocation() : Enemy->GetActorLocation();
+
+				Enemy->Multicast_ActivateRagdoll(Impulse, ImpulseLocation);
+				Enemy->SetLifeSpan(CachedParryRagdollLifeSpan);
+
+				UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 래그돌 Multicast 호출 — Impulse=%.0f, UpRatio=%.1f, LifeSpan=%.1f"),
+					CachedParryRagdollImpulse, CachedParryRagdollUpwardRatio, CachedParryRagdollLifeSpan);
+			}
+			else
+			{
+				Enemy->SetLifeSpan(0.5f);
+				UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: bParryRagdollDeath=false — 기존 사망 처리 SetLifeSpan(0.5)"));
+			}
 		}
 
 		// 적 AnimLocked 해제 (서버 태그이므로 서버에서만)

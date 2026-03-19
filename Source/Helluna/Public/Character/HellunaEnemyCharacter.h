@@ -194,6 +194,10 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_PlayParryVictim();
 
+	/** 처형 후 래그돌 전환 + 임펄스 (서버 → 전체 클라, 시각적) */
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_ActivateRagdoll(FVector Impulse, FVector ImpulseLocation);
+
 public:
 	/** 피격 몽타주 재생 (서버 → 멀티캐스트) */
 	UFUNCTION(NetMulticast, Reliable)

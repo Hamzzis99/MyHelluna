@@ -311,4 +311,12 @@ private:
 	float OrbitElapsed = 0.f;
 	float OrbitBaseYaw = 0.f;    // 오빗 시작 시점의 Yaw
 	bool bOrbitActive = false;
+
+	// ═══════════════════════════════════════════════════════════
+	// 래그돌 사망 — 캐싱
+	// ═══════════════════════════════════════════════════════════
+	bool bCachedParryRagdollDeath = true;
+	float CachedParryRagdollImpulse = 5000.f;
+	float CachedParryRagdollUpwardRatio = 0.3f;
+	float CachedParryRagdollLifeSpan = 3.0f;
 };
