@@ -422,6 +422,11 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 					// 시간 기반 Lerp로 부드럽게 진입 (정확히 N초)
 					TargetCameraEntryRotation = CameraRotation;
 					StartCameraEntryRotation = PC->GetControlRotation();
+					
+					// [Fix: yaw-wrap] 최단 경로 Yaw 정규화 — 360도 넘는 긴 방향 회전 방지
+					float DeltaYaw = FRotator::NormalizeAxis(TargetCameraEntryRotation.Yaw - StartCameraEntryRotation.Yaw);
+					TargetCameraEntryRotation.Yaw = StartCameraEntryRotation.Yaw + DeltaYaw;
+					
 					CameraEntryElapsedTime = 0.f;
 					CameraEntryTickCount = 0;
 
@@ -504,10 +509,13 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		return;
 	}
 
-	// 카메라 연출 + 입력 잠금 (딜레이와 무관하게 즉시 적용)
+	// 카메라 연출 + 입력 잠금 (로컬 플레이어에게만 적용)
 	BeginCameraEffect(Hero);
-	Hero->LockMoveInput();
-	Hero->LockLookInput();
+	if (Hero->IsLocallyControlled())
+	{
+		Hero->LockMoveInput();
+		Hero->LockLookInput();
+	}
 
 	// ─── 워프 등장 딜레이 (메시 숨김 → 딜레이 → 메시 등장 + 몽타주) ───
 	if (CachedWarpAppearDelay > 0.f)
@@ -951,9 +959,16 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 		}
 
 		Hero->UnlockMoveInput();
-		// LookInput은 EndCameraEffect의 복귀 타이머 완료 시 해제 (ControlRotation InterpTo 중 충돌 방지)
+		// [Fix: sensitivity] 처형 끝나면 즉시 시점 잠금 해제 — 마우스 즉시 사용 가능
+		if (Hero->IsLocallyControlled())
+		{
+			Hero->UnlockLookInput();
+			Hero->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] CLIENT: bUseControllerRotationYaw 즉시 원복=%s"),
+				bSavedUseControllerRotationYaw ? TEXT("true") : TEXT("false"));
+		}
 		EndCameraEffect(Hero);
-		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s: 이동 잠금 해제 + 카메라 복귀 시작 (시점 잠금은 복귀 완료 시 해제)"),
+		UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] %s: 이동+시점 잠금 즉시 해제 + 카메라 복귀 시작"),
 			bIsServer ? TEXT("SERVER") : TEXT("CLIENT"));
 	}
 
@@ -984,14 +999,34 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 	UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] Frame=%llu, bWasCancelled=%d, bHandleFinishedCalled=%s"),
 		GFrameCounter, bWasCancelled, bHandleExecutionFinishedCalled ? TEXT("Y") : TEXT("N"));
 
-	// [Fix: bug-006] CLIENT EndAbility가 SERVER로 리플리케이트되면
-	// SERVER의 MontageTask 콜백 없이 여기로 직행함.
+	// [Fix: bug-006] SERVER가 먼저 EndAbility를 호출하면
+	// CLIENT의 MontageTask 콜백이 안 오고 여기로 직행함.
 	// 서버이고 HandleExecutionFinished가 아직 미호출이면 여기서 실행.
 	if (ActorInfo && ActorInfo->AvatarActor.IsValid() && ActorInfo->AvatarActor->HasAuthority()
 		&& !bHandleExecutionFinishedCalled && !bWasCancelled)
 	{
 		UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] SERVER: HandleExecutionFinished 미호출 → 여기서 실행"));
 		HandleExecutionFinished(false);
+	}
+
+	// [Fix: camera-lock-on-client] SERVER EndAbility가 CLIENT로 리플리케이트되면
+	// CLIENT의 HandleExecutionFinished가 안 불려서 카메라 잠금이 안 풀림.
+	// CLIENT에서 HandleExecutionFinished 미호출 시 카메라 원복만 수행.
+	if (ActorInfo && ActorInfo->AvatarActor.IsValid() && !ActorInfo->AvatarActor->HasAuthority()
+		&& !bHandleExecutionFinishedCalled)
+	{
+		AHellunaHeroCharacter* Hero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get());
+		if (Hero)
+		{
+			UE_LOG(LogGunParry, Warning, TEXT("[EndAbility] CLIENT: HandleExecutionFinished 미호출 → 카메라+잠금 원복"));
+			Hero->PlayFullBody = false;
+			if (UCapsuleComponent* Capsule = Hero->GetCapsuleComponent())
+			{
+				Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			}
+			Hero->UnlockMoveInput();
+			EndCameraEffect(Hero);
+		}
 	}
 
 	// 카메라 진입 InterpTo 타이머 안전 해제
@@ -1300,7 +1335,14 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 	const bool bHasOffset = !CachedCameraTargetOffset.IsZero();
 
 	// ControlRotation 복귀 목표 = 처형 전 원래 보던 방향
-	const float TargetControlYaw = SavedControlRotationYaw;
+	// [Fix: yaw-wrap] 최단 경로 Yaw 정규화
+	float TargetControlYaw = SavedControlRotationYaw;
+	if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+	{
+		float CurrentYaw = PC->GetControlRotation().Yaw;
+		float DeltaYaw = FRotator::NormalizeAxis(TargetControlYaw - CurrentYaw);
+		TargetControlYaw = CurrentYaw + DeltaYaw;
+	}
 	const bool bSavedUseCtrlYaw = bSavedUseControllerRotationYaw;
 	const bool bSavedCollisionTest = bSavedDoCollisionTest;
 

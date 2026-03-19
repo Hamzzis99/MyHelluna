@@ -157,6 +157,9 @@ private:
 	// 캐싱된 프리뷰 이미지 사이즈
 	FVector2D CachedPreviewImageSize = FVector2D::ZeroVector;
 
-	// WrapBox에서 BuildingButton 위젯 수집 및 OnCardClicked 바인딩
+	// BuildingButton 델리게이트 바인딩 + BuildCategory별 WrapBox 동적 배치
 	void BindBuildingButtonDelegates();
+
+	// WidgetTree에서 BuildingButton들을 찾아서 BuildCategory에 따라 WrapBox에 재배치
+	void DistributeBuildingButtonsToWrapBoxes();
 };

@@ -91,6 +91,9 @@ void UInv_BuildMenu::NativeOnInitialized()
 	// BuildingButton 델리게이트 바인딩
 	BindBuildingButtonDelegates();
 
+	// BuildCategory별로 BuildingButton을 올바른 WrapBox에 동적 배치
+	DistributeBuildingButtonsToWrapBoxes();
+
 	// === 초기 탭 = 지원 ===
 	ShowSupport();
 
@@ -566,4 +569,56 @@ void UInv_BuildMenu::BindBuildingButtonDelegates()
 			Btn->OnCardClicked.AddUniqueDynamic(this, &ThisClass::OnCardClicked);
 		}
 	});
+}
+
+// ════════════════════════════════════════════════════════════════
+// BuildCategory별 BuildingButton → WrapBox 동적 배치
+// ════════════════════════════════════════════════════════════════
+// WidgetTree를 순회하여 모든 UInv_BuildingButton을 수집한 후,
+// 각 버튼의 BuildCategory(지원/보조/건설)에 따라 올바른 WrapBox로 이동.
+// TArray에 먼저 수집 후 처리 — ForEachWidget 순회 중 RemoveFromParent 호출 방지.
+void UInv_BuildMenu::DistributeBuildingButtonsToWrapBoxes()
+{
+	if (!WidgetTree) return;
+	if (!IsValid(WrapBox_Support) || !IsValid(WrapBox_Auxiliary) || !IsValid(WrapBox_Construction))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BuildMenu] WrapBox 바인딩 실패 - 동적 배치 건너뜀"));
+		return;
+	}
+
+	int32 SupportCount = 0, AuxiliaryCount = 0, ConstructionCount = 0;
+
+	TArray<UInv_BuildingButton*> AllButtons;
+	WidgetTree->ForEachWidget([&AllButtons](UWidget* Widget)
+	{
+		UInv_BuildingButton* Btn = Cast<UInv_BuildingButton>(Widget);
+		if (IsValid(Btn))
+		{
+			AllButtons.Add(Btn);
+		}
+	});
+
+	for (UInv_BuildingButton* Btn : AllButtons)
+	{
+		Btn->RemoveFromParent();
+
+		switch (Btn->GetBuildCategory())
+		{
+		case EBuildCategory::Support:
+			WrapBox_Support->AddChild(Btn);
+			SupportCount++;
+			break;
+		case EBuildCategory::Auxiliary:
+			WrapBox_Auxiliary->AddChild(Btn);
+			AuxiliaryCount++;
+			break;
+		case EBuildCategory::Construction:
+			WrapBox_Construction->AddChild(Btn);
+			ConstructionCount++;
+			break;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[BuildMenu] BuildingButton 동적 배치 완료: Support=%d, Auxiliary=%d, Construction=%d"),
+		SupportCount, AuxiliaryCount, ConstructionCount);
 }

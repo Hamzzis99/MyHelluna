@@ -50,6 +50,7 @@ public:
 	// === Getter 함수들 (BuildMenu 디테일 패널에서 사용) ===
 	const FText& GetBuildingName() const { return BuildingName; }
 	const FText& GetBuildingDescription() const { return BuildingDescription; }
+	EBuildCategory GetBuildCategory() const { return BuildCategory; }
 	UStaticMesh* GetPreviewMesh() const { return PreviewMesh; }
 	const FRotator& GetPreviewRotationOffset() const { return PreviewRotationOffset; }
 	float GetPreviewCameraDistance() const { return PreviewCameraDistance; }
