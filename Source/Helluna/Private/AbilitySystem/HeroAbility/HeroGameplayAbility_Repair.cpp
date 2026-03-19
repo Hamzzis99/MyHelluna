@@ -12,6 +12,14 @@
 #include "DebugHelper.h"
 #include "Helluna.h"
 
+UHeroGameplayAbility_Repair::UHeroGameplayAbility_Repair()
+{
+	// InstancedPerActor: 액터당 1개 인스턴스 → CurrentWidget 멤버 변수가 유지됨
+	// NonInstanced(기본값)이면 CDO를 공유하므로 CurrentWidget 토글이 불가능!
+	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
+	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalOnly;
+}
+
 void UHeroGameplayAbility_Repair::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
@@ -33,8 +41,12 @@ void UHeroGameplayAbility_Repair::Repair(const FGameplayAbilityActorInfo* ActorI
 
 	if (!Hero->IsLocallyControlled()) return;
 
+	UE_LOG(LogTemp, Warning, TEXT("[Repair] Repair() called. this=%p, CurrentWidget=%p, IsValid=%s"),
+		this, CurrentWidget.Get(),
+		IsValid(CurrentWidget) ? TEXT("true") : TEXT("false"));
+
 	// F키 토글: Widget이 이미 열려있으면 닫기
-	const bool bIsInViewport = CurrentWidget && CurrentWidget->IsInViewport();
+	const bool bIsInViewport = IsValid(CurrentWidget) && CurrentWidget->IsInViewport();
 	UE_LOG(LogTemp, Warning, TEXT("[Repair] Toggle detected, widget is in viewport: %s"),
 		bIsInViewport ? TEXT("true") : TEXT("false"));
 
@@ -47,6 +59,12 @@ void UHeroGameplayAbility_Repair::Repair(const FGameplayAbilityActorInfo* ActorI
 		}
 		else
 		{
+			APlayerController* PC = Hero->GetController<APlayerController>();
+			if (PC)
+			{
+				PC->SetInputMode(FInputModeGameOnly());
+				PC->bShowMouseCursor = false;
+			}
 			CurrentWidget->RemoveFromParent();
 		}
 		CurrentWidget = nullptr;
@@ -83,6 +101,9 @@ void UHeroGameplayAbility_Repair::Repair(const FGameplayAbilityActorInfo* ActorI
 	CurrentWidget = CreateWidget<UUserWidget>(PC, RepairMaterialWidgetClass);
 	if (!CurrentWidget) return;
 
+	UE_LOG(LogTemp, Warning, TEXT("[Repair] Widget created: %p (%s)"),
+		CurrentWidget.Get(), *CurrentWidget->GetClass()->GetName());
+
 	// RepairWidget이면 InitializeWidget 호출
 	if (URepairWidget* RepairWidget = Cast<URepairWidget>(CurrentWidget))
 	{
@@ -94,4 +115,6 @@ void UHeroGameplayAbility_Repair::Repair(const FGameplayAbilityActorInfo* ActorI
 	PC->FlushPressedKeys();
 	PC->SetInputMode(FInputModeGameAndUI());
 	PC->bShowMouseCursor = true;
+
+	UE_LOG(LogTemp, Warning, TEXT("[Repair] Widget added to viewport. CurrentWidget=%p"), CurrentWidget.Get());
 }
