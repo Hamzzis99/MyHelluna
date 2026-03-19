@@ -237,9 +237,9 @@ void UInv_InventoryGrid::RefreshHoverItemBrushSize(float TargetTileSize)
 	if (!GridFragment || !ImageFragment) return;
 
 	const float IconTileWidth = TargetTileSize - GridFragment->GetGridPadding() * 2;
-	// R키 회전 시 회전된 dimensions로 DrawSize 계산
-	const FIntPoint EffDim = GetEffectiveDimensions(GridFragment, HoverItem->IsRotated());
-	const FVector2D DrawSize = FVector2D(EffDim) * IconTileWidth;
+	// 브러시 ImageSize는 항상 원본 크기 (회전은 RenderTransform으로만 처리)
+	const FIntPoint OrigDim = GridFragment->GetGridSize();
+	const FVector2D DrawSize = FVector2D(OrigDim) * IconTileWidth;
 
 	FSlateBrush IconBrush;
 	IconBrush.SetResourceObject(ImageFragment->GetIcon());
@@ -363,8 +363,8 @@ FReply UInv_InventoryGrid::NativeOnKeyDown(const FGeometry& MyGeometry, const FK
 		const FInv_ImageFragment* ImageFragment = GetFragment<FInv_ImageFragment>(Item, FragmentTags::IconFragment);
 		if (GridFragment && ImageFragment)
 		{
-			// 브러시 크기는 회전된 dimensions (캔버스 풋프린트)
-			const FVector2D DrawSize = GetDrawSizeRotated(GridFragment, bNewRotated);
+			// 브러시 ImageSize는 항상 원본 크기 (회전은 RenderTransform으로만 처리)
+			const FVector2D DrawSize = GetDrawSizeRotated(GridFragment, false);
 
 			FSlateBrush IconBrush;
 			IconBrush.SetResourceObject(ImageFragment->GetIcon());
@@ -911,7 +911,8 @@ void UInv_InventoryGrid::PickUp(UInv_InventoryItem* ClickedInventoryItem, const 
 			const FInv_ImageFragment* ImgFrag = GetFragment<FInv_ImageFragment>(ClickedInventoryItem, FragmentTags::IconFragment);
 			if (ImgFrag)
 			{
-				const FVector2D DrawSize = GetDrawSizeRotated(GridFrag, true);
+				// 브러시 ImageSize는 항상 원본 크기 (회전은 RenderTransform으로만 처리)
+				const FVector2D DrawSize = GetDrawSizeRotated(GridFrag, false);
 				FSlateBrush IconBrush;
 				IconBrush.SetResourceObject(ImgFrag->GetIcon());
 				IconBrush.DrawAs = ESlateBrushDrawType::Image;
