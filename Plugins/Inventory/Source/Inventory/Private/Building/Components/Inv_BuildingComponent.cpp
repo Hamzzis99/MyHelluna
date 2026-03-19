@@ -218,8 +218,14 @@ void UInv_BuildingComponent::StartBuildMode()
 #endif
 	}
 
-	// ★ 빌드 모드 HUD 표시
-	ShowBuildModeHUD();
+	// ★ 빌드 모드 HUD 표시 (로컬 클라이언트만!)
+	UE_LOG(LogTemp, Warning, TEXT("[BuildModeHUD-Debug] StartBuildMode → ShowBuildModeHUD 호출 직전. IsLocalController=%s"),
+		OwningPC->IsLocalController() ? TEXT("TRUE") : TEXT("FALSE"));
+	if (OwningPC->IsLocalController())
+	{
+		ShowBuildModeHUD();
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[BuildModeHUD-Debug] StartBuildMode → ShowBuildModeHUD 호출 완료"));
 }
 
 void UInv_BuildingComponent::EndBuildMode()
@@ -229,8 +235,11 @@ void UInv_BuildingComponent::EndBuildMode()
 	UE_LOG(LogTemp, Warning, TEXT("=== Build Mode ENDED ==="));
 #endif
 
-	// ★ 빌드 모드 HUD 제거
-	HideBuildModeHUD();
+	// ★ 빌드 모드 HUD 제거 (로컬 클라이언트만!)
+	if (OwningPC.IsValid() && OwningPC->IsLocalController())
+	{
+		HideBuildModeHUD();
+	}
 
 	// ★ BuildMode 종료 시 입력 비활성화 (IMC 제거 + 바인딩 해제)
 	DisableBuildModeInput();
@@ -859,12 +868,36 @@ void UInv_BuildingComponent::EnableBuildModeInput()
 
 void UInv_BuildingComponent::ShowBuildModeHUD()
 {
-	if (!OwningPC.IsValid() || !BuildModeHUDClass) return;
+	if (!OwningPC.IsValid()) return;
+
+	// BuildModeHUDClass가 NULL이면 직접 로드 시도 (BP CDO 저장 실패 대비)
+	if (!BuildModeHUDClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BuildModeHUD-Debug] BuildModeHUDClass가 NULL! 직접 로드 시도..."));
+		UClass* LoadedClass = LoadClass<UInv_BuildModeHUD>(nullptr, TEXT("/Inventory/Widgets/Building/WBP_Inv_BuildModeHUD.WBP_Inv_BuildModeHUD_C"));
+		if (LoadedClass)
+		{
+			BuildModeHUDClass = LoadedClass;
+			UE_LOG(LogTemp, Warning, TEXT("[BuildModeHUD-Debug] 직접 로드 성공: %s"), *LoadedClass->GetName());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("[BuildModeHUD-Debug] 직접 로드도 실패! HUD를 표시할 수 없습니다."));
+			return;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[BuildModeHUD-Debug] ShowBuildModeHUD 진입. OwningPC=%s, BuildModeHUDClass=%s"),
+		TEXT("Valid"), *BuildModeHUDClass->GetName());
 
 	// 이미 표시 중이면 제거 후 재생성
 	HideBuildModeHUD();
 
 	BuildModeHUDInstance = CreateWidget<UInv_BuildModeHUD>(OwningPC.Get(), BuildModeHUDClass);
+
+	UE_LOG(LogTemp, Warning, TEXT("[BuildModeHUD-Debug] CreateWidget 결과: %s"),
+		IsValid(BuildModeHUDInstance) ? TEXT("성공") : TEXT("실패!"));
+
 	if (!IsValid(BuildModeHUDInstance)) return;
 
 	// 건물 정보 설정
@@ -878,9 +911,7 @@ void UInv_BuildingComponent::ShowBuildModeHUD()
 
 	BuildModeHUDInstance->AddToViewport();
 
-#if INV_DEBUG_BUILD
-	UE_LOG(LogTemp, Warning, TEXT("BuildModeHUD: 표시됨, BuildingName=%s"), *CurrentBuildingInfo.BuildingName.ToString());
-#endif
+	UE_LOG(LogTemp, Warning, TEXT("[BuildModeHUD-Debug] AddToViewport 완료! BuildingName=%s"), *CurrentBuildingInfo.BuildingName.ToString());
 }
 
 void UInv_BuildingComponent::HideBuildModeHUD()
