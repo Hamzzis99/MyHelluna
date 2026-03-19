@@ -1516,18 +1516,9 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 				bDone = false;
 		}
 
-		// ControlRotation Yaw InterpTo (LookInput 잠금 중이므로 플레이어 입력과 충돌 없음)
-		if (WeakPC.IsValid())
-		{
-			FRotator CurCtrl = WeakPC->GetControlRotation();
-			const float NewYaw = FMath::FInterpTo(CurCtrl.Yaw, TargetControlYaw, TickRate, InterpSpeed);
-			if (!FMath::IsNearlyEqual(FMath::UnwindDegrees(NewYaw - TargetControlYaw), 0.f, 1.0f))
-			{
-				bDone = false;
-			}
-			CurCtrl.Yaw = NewYaw;
-			WeakPC->SetControlRotation(CurCtrl);
-		}
+		// [Fix: mouse-stiffness] ControlRotation Yaw InterpTo 제거
+		// HandleExecutionFinished에서 LookInput 즉시 해제했으므로
+		// 여기서 Yaw를 건드리면 마우스 입력과 충돌 → 뻣뻣함 발생
 
 		if (bDone)
 		{
@@ -1539,12 +1530,7 @@ void UHeroGameplayAbility_GunParry::EndCameraEffect(AHellunaHeroCharacter* Hero)
 			}
 			if (WeakCamera.IsValid())
 				WeakCamera->SetFieldOfView(TargetFOV);
-			if (WeakPC.IsValid())
-			{
-				FRotator FinalCtrl = WeakPC->GetControlRotation();
-				FinalCtrl.Yaw = TargetControlYaw;
-				WeakPC->SetControlRotation(FinalCtrl);
-			}
+			// [Fix: mouse-stiffness] Yaw 스냅 제거 — 마우스가 이미 제어 중
 
 			// [Fix: collision-probe] 카메라 충돌 프로브 원복
 			// (Lock/Unlock은 HandleExecutionFinished에서 이미 즉시 해제됨 — 여기서 중복 호출하면 카운터 마이너스)
