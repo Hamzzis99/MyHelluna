@@ -18,6 +18,7 @@ namespace HellunaGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_Repair, "InputTag.Repair");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_Farming, "InputTag.Farming");
 	UE_DEFINE_GAMEPLAY_TAG(InputTag_Reload, "InputTag.Reload");
+	UE_DEFINE_GAMEPLAY_TAG(InputTag_Kick, "InputTag.Kick");
 
 	/** Player Ability tags **/
 
