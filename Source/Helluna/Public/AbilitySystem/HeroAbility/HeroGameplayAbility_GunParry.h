@@ -160,7 +160,7 @@ private:
 	AHellunaEnemyCharacter* FindParryableEnemy(const AHellunaHeroCharacter* Hero) const; 
 
 	/** 패링 가능한 적이 근처에 있는지 경량 체크 (static — TryParryInstead용) */
-	static AHellunaEnemyCharacter* FindParryableEnemyStatic(const AHellunaHeroCharacter* Hero);
+	static AHellunaEnemyCharacter* FindParryableEnemyStatic(const AHellunaHeroCharacter* Hero, bool bSkipAnimLocked = false);
 
 	/** 몽타주 완료 콜백 */
 	UFUNCTION()
