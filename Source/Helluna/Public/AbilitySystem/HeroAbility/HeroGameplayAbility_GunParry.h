@@ -7,6 +7,7 @@
 #include "HeroGameplayAbility_GunParry.generated.h"
 
 class AHellunaEnemyCharacter;
+class UMaterialInterface;
 class AHeroWeapon_GunBase;
 class UHellunaAbilitySystemComponent;
 class UAbilityTask_PlayMontageAndWait;
@@ -121,6 +122,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",
 		meta = (ToolTip = "스태거 유지 시간(초). 이 시간 내에 발차기 가능."))
 	float ParryStaggerDuration = 4.0f;
+
+	/** 스태거 시각 효과 오버레이 머티리얼 (Staggered 동안 적 메시에 적용) */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",
+		meta = (ToolTip = "Staggered 상태 동안 적 메시에 적용할 오버레이 머티리얼. 없으면 시각 효과 없음."))
+	TObjectPtr<UMaterialInterface> StaggerOverlayMaterial = nullptr;
 
 	/** 스태거 AOE 데미지. 0이면 넉백만. */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",

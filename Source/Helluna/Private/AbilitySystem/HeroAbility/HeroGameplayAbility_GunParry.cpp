@@ -1324,6 +1324,12 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 					NearbyASC->AddStateTag(HellunaGameplayTags::Enemy_State_Staggered);
 					StaggerCount++;
 
+					// [디버깅] Staggered 오버레이 머티리얼 적용
+					if (StaggerOverlayMaterial && NearbyEnemy->GetMesh())
+					{
+						NearbyEnemy->GetMesh()->SetOverlayMaterial(StaggerOverlayMaterial);
+					}
+
 					FTimerHandle StaggerTimer;
 					TWeakObjectPtr<AHellunaEnemyCharacter> WeakEnemy = NearbyEnemy;
 					const float Duration = ParryStaggerDuration;
@@ -1335,6 +1341,11 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 								if (UHellunaAbilitySystemComponent* ASC = WeakEnemy->GetHellunaAbilitySystemComponent())
 								{
 									ASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_Staggered);
+								}
+								// 오버레이 머티리얼 제거
+								if (WeakEnemy->GetMesh())
+								{
+									WeakEnemy->GetMesh()->SetOverlayMaterial(nullptr);
 								}
 							}
 						}), Duration, false);
