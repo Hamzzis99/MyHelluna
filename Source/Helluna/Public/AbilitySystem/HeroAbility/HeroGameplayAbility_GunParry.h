@@ -12,6 +12,7 @@ class UHellunaAbilitySystemComponent;
 class UAbilityTask_PlayMontageAndWait;
 class UAbilityTask_WaitGameplayEvent;
 class UCameraShakeBase;
+class UCurveFloat;
 
 HELLUNA_API DECLARE_LOG_CATEGORY_EXTERN(LogGunParry, Log, All);
 
@@ -96,6 +97,35 @@ protected:
 		meta = (DisplayName = "사후 무적 시간(초)", ClampMin = "0.0", ClampMax = "5.0",
 			ToolTip = "처형 후 히어로 무적 시간(초). 이 동안 데미지 면역."))
 	float PostParryInvincibleDuration = 1.0f;
+
+	/** 적이 나를 타겟할 때만 패링 가능 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Detection",
+		meta = (ToolTip = "true면 적이 나(Hero)를 AI 타겟으로 할 때만 패링 가능. false면 기존처럼 범위+각도만 체크."))
+	bool bRequireEnemyTargetingMe = false;
+
+	// ═══════════════════════════════════════════════════════════
+	// 스태거 시스템 — 패링 후 주변 적 넉백 + Staggered 태그
+	// ═══════════════════════════════════════════════════════════
+
+	/** 패링 처형 후 주변 적 스태거 범위(cm). 0이면 비활성. */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",
+		meta = (ToolTip = "패링 처형 후 주변 적 스태거 범위(cm). 0이면 비활성."))
+	float ParryStaggerRadius = 300.f;
+
+	/** 스태거 넉백 강도 */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",
+		meta = (ToolTip = "스태거 넉백 강도."))
+	float ParryStaggerKnockback = 800.f;
+
+	/** 스태거 유지 시간(초). 이 시간 내에 발차기 가능. */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",
+		meta = (ToolTip = "스태거 유지 시간(초). 이 시간 내에 발차기 가능."))
+	float ParryStaggerDuration = 4.0f;
+
+	/** 스태거 AOE 데미지. 0이면 넉백만. */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",
+		meta = (ToolTip = "스태거 AOE 데미지. 0이면 넉백만."))
+	float ParryStaggerDamage = 0.f;
 
 	// ═══════════════════════════════════════════════════════════
 	// GAS 오버라이드
@@ -237,6 +267,7 @@ private:
 	/** ControlRotation/bUseControllerRotationYaw 저장 (카메라 정면 배치용) */
 	float SavedControlRotationYaw = 0.f;
 	bool bSavedUseControllerRotationYaw = true;
+	bool bSavedOrientRotationToMovement = true;
 
 	/** 패링 전 히어로 충돌 상태 저장 */
 	ECollisionEnabled::Type SavedHeroCapsuleCollision = ECollisionEnabled::QueryAndPhysics;
@@ -297,6 +328,23 @@ private:
 
 	/** 다이나믹 VFX가 현재 활성 상태인지 (중복 호출/원복 추적) */
 	bool bDynamicVFXActive = false;
+
+	// Phase 2 VFX 캐시
+	float CachedKillMotionBlurAmount = 0.f;
+	float CachedKillMotionBlurDuration = 0.2f;
+	TSubclassOf<UCameraShakeBase> CachedWarpShakeClass = nullptr;
+	float CachedWarpShakeScale = 1.0f;
+
+	// CurveFloat 카메라
+	UPROPERTY()
+	TObjectPtr<UCurveFloat> CachedArmCurve = nullptr;
+	UPROPERTY()
+	TObjectPtr<UCurveFloat> CachedFOVCurve = nullptr;
+	UPROPERTY()
+	TObjectPtr<UCurveFloat> CachedYawCurve = nullptr;
+	float CurveStartTime = 0.f;
+	float CurveDuration = 0.f;
+	FTimerHandle CameraCurveTimerHandle;
 
 	// ═══════════════════════════════════════════════════════════
 	// 시네마틱 카메라 — DOF + 오빗

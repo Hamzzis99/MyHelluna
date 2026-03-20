@@ -81,4 +81,8 @@ namespace HellunaGameplayTags
 	/** 건패링 - GameplayEvent **/
 	HELLUNA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Parry_Fire);
 
+	/** 발차기 시스템 **/
+	HELLUNA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Kick_Impact);
+	HELLUNA_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Hero_State_Kicking);
+
 }
