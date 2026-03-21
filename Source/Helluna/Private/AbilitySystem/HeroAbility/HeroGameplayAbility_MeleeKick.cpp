@@ -199,9 +199,6 @@ void UHeroGameplayAbility_MeleeKick::ActivateAbility(
 		CMC->bOrientRotationToMovement = false;  // CMC 회전 OFF
 		UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 이동+회전 완전 잠금"));
 	}
-	bSavedUseControllerYaw = Hero->bUseControllerRotationYaw;
-	Hero->bUseControllerRotationYaw = false;  // 컨트롤러 회전 OFF
-	Hero->LockMoveInput();  // 입력 차단
 
 	// === 카메라 연출 시작 (CLIENT만) ===
 	if (Hero->IsLocallyControlled())
@@ -376,6 +373,21 @@ void UHeroGameplayAbility_MeleeKick::OnKickImpactEvent(FGameplayEventData Payloa
 					NearbyASC->AddStateTag(HellunaGameplayTags::Enemy_State_Staggered);
 					AOECount++;
 
+					// 오버레이 머티리얼 적용 (반짝임)
+					if (StaggerOverlayMaterial)
+					{
+						if (USkeletalMeshComponent* EnemyMesh = NearbyEnemy->GetMesh())
+						{
+							EnemyMesh->SetOverlayMaterial(StaggerOverlayMaterial);
+						}
+					}
+
+					// Stagger 몽타주 재생
+					if (StaggerMontage)
+					{
+						NearbyEnemy->PlayAnimMontage(StaggerMontage, 1.0f);
+					}
+
 					FTimerHandle StaggerTimer;
 					TWeakObjectPtr<AHellunaEnemyCharacter> WeakEnemy = NearbyEnemy;
 					const float Duration = KickAOEStaggerDuration;
@@ -388,6 +400,13 @@ void UHeroGameplayAbility_MeleeKick::OnKickImpactEvent(FGameplayEventData Payloa
 								{
 									ASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_Staggered);
 								}
+								// 오버레이 해제
+								if (USkeletalMeshComponent* Mesh = WeakEnemy->GetMesh())
+								{
+									Mesh->SetOverlayMaterial(nullptr);
+								}
+								// Stagger 몽타주 중단
+								WeakEnemy->StopAnimMontage(nullptr);
 							}
 						}), Duration, false);
 				}
@@ -528,14 +547,12 @@ void UHeroGameplayAbility_MeleeKick::EndAbility(
 			Hero->PlayFullBody = false;
 			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] Hero.PlayFullBody = false"));
 
-			// 이동+회전 완전 복원
+			// 이동+회전 복원
 			if (UCharacterMovementComponent* CMC = Hero->GetCharacterMovement())
 			{
 				CMC->SetMovementMode(MOVE_Walking);
 				CMC->bOrientRotationToMovement = bSavedOrientRotation;
 			}
-			Hero->bUseControllerRotationYaw = bSavedUseControllerYaw;
-			Hero->UnlockMoveInput();
 			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 이동+회전 잠금 해제"));
 
 			if (UHellunaAbilitySystemComponent* HeroASC = Hero->GetHellunaAbilitySystemComponent())

@@ -8,6 +8,7 @@
 
 class AHellunaEnemyCharacter;
 class UCameraShakeBase;
+class UMaterialInterface;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMeleeKick, Log, All);
 
@@ -79,10 +80,20 @@ public:
 		meta = (ToolTip = "발차기 셰이크 강도."))
 	float KickShakeScale = 1.5f;
 
-	/** 발차기 AOE로 맞은 적에게도 Staggered 부여 시간(초). 0이면 연쇄 없음. */
+	/** 발차기 AOE Staggered 연쇄 지속 시간(초). 0이면 연쇄 없음. */
 	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick",
 		meta = (ToolTip = "발차기 AOE Staggered 연쇄 지속 시간(초). 0이면 연쇄 없음."))
 	float KickAOEStaggerDuration = 4.0f;
+
+	/** Staggered 오버레이 머티리얼 (킥 가능 적 반짝임) */
+	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick",
+		meta = (ToolTip = "Staggered 적에게 적용할 오버레이 머티리얼."))
+	TObjectPtr<UMaterialInterface> StaggerOverlayMaterial = nullptr;
+
+	/** Staggered 적에게 재생할 몽타주 */
+	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick",
+		meta = (ToolTip = "Staggered 적에게 재생할 아이들 몽타주."))
+	TObjectPtr<UAnimMontage> StaggerMontage = nullptr;
 
 	// ═══════════════════════════════════════════════════════════
 	// 카메라 연출
@@ -160,7 +171,6 @@ private:
 
 	bool bKickImpactProcessed = false;
 	bool bSavedOrientRotation = false;
-	bool bSavedUseControllerYaw = false;
 
 	// 카메라 원본 값 저장
 	float SavedKickArmLength = 0.f;

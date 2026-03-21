@@ -1347,6 +1347,12 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 						NearbyEnemy->GetMesh()->SetOverlayMaterial(StaggerOverlayMaterial);
 					}
 
+					// Stagger 몽타주 재생
+					if (StaggerMontage)
+					{
+						NearbyEnemy->PlayAnimMontage(StaggerMontage, 1.0f);
+					}
+
 					FTimerHandle StaggerTimer;
 					TWeakObjectPtr<AHellunaEnemyCharacter> WeakEnemy = NearbyEnemy;
 					const float Duration = ParryStaggerDuration;
@@ -1364,6 +1370,8 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 								{
 									WeakEnemy->GetMesh()->SetOverlayMaterial(nullptr);
 								}
+								// Stagger 몽타주 중단
+								WeakEnemy->StopAnimMontage(nullptr);
 							}
 						}), Duration, false);
 				}

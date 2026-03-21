@@ -128,6 +128,11 @@ protected:
 		meta = (ToolTip = "Staggered 상태 동안 적 메시에 적용할 오버레이 머티리얼. 없으면 시각 효과 없음."))
 	TObjectPtr<UMaterialInterface> StaggerOverlayMaterial = nullptr;
 
+	/** Staggered 적에게 재생할 몽타주 (비틀거림) */
+	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",
+		meta = (ToolTip = "Staggered 적에게 재생할 아이들 몽타주."))
+	TObjectPtr<UAnimMontage> StaggerMontage = nullptr;
+
 	/** 스태거 AOE 데미지. 0이면 넉백만. */
 	UPROPERTY(EditDefaultsOnly, Category = "GunParry|Stagger",
 		meta = (ToolTip = "스태거 AOE 데미지. 0이면 넉백만."))
