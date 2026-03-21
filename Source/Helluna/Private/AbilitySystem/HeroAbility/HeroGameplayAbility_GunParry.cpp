@@ -170,6 +170,15 @@ bool UHeroGameplayAbility_GunParry::CanActivateAbility(
 	const AHellunaHeroCharacter* Hero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get());
 	if (!Hero) { UE_LOG(LogGunParry, Warning, TEXT("[CanActivate] Hero 캐스트 실패")); return false; }
 
+	// 점프/공중 상태에서는 패링 불가
+	if (const UCharacterMovementComponent* CMC = Hero->GetCharacterMovement())
+	{
+		if (CMC->IsFalling())
+		{
+			return false;
+		}
+	}
+
 	const AHeroWeapon_GunBase* Weapon = Cast<AHeroWeapon_GunBase>(Hero->GetCurrentWeapon());
 	if (!Weapon) { UE_LOG(LogGunParry, Warning, TEXT("[CanActivate] Weapon 없음")); return false; }
 	if (!Weapon->bCanParry) { UE_LOG(LogGunParry, Warning, TEXT("[CanActivate] bCanParry=false")); return false; }
@@ -483,6 +492,14 @@ void UHeroGameplayAbility_GunParry::ActivateAbility(
 		}
 
 		Hero->SetActorLocationAndRotation(WarpLocation, WarpRotation);
+
+		// 워프 후 이동 완전 정지 (점프 중 패링 시 추락 방지)
+		if (UCharacterMovementComponent* CMC = Hero->GetCharacterMovement())
+		{
+			CMC->StopMovementImmediately();  // Velocity 즉시 0
+			CMC->DisableMovement();           // MOVE_None → 중력 안 받음
+			UE_LOG(LogGunParry, Warning, TEXT("[ActivateAbility] 히어로 이동 정지 + DisableMovement"));
+		}
 
 
 
@@ -1381,6 +1398,13 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 				*UEnum::GetValueAsString(SavedHeroCapsuleCollision));
 		}
 
+		// 이동 모드 복원 (워프 시 DisableMovement 했으므로)
+		if (UCharacterMovementComponent* CMC = Hero->GetCharacterMovement())
+		{
+			CMC->SetMovementMode(MOVE_Walking);
+			UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] 히어로 이동 복원 (Walking)"));
+		}
+
 		// 이동+시점 잠금 즉시 해제 (Lock은 IsLocallyControlled에서만 호출되므로 Unlock도 동일)
 		if (Hero->IsLocallyControlled())
 		{
@@ -1525,6 +1549,11 @@ void UHeroGameplayAbility_GunParry::EndAbility(
 				HeroCapsule->SetCollisionEnabled(SavedHeroCapsuleCollision);
 				if (SavedHeroCapsuleProfile != NAME_None)
 					HeroCapsule->SetCollisionProfileName(SavedHeroCapsuleProfile);
+			}
+			// 이동 모드 복원
+			if (UCharacterMovementComponent* CMC = Hero->GetCharacterMovement())
+			{
+				CMC->SetMovementMode(MOVE_Walking);
 			}
 			Hero->UnlockMoveInput();
 			if (Hero->IsLocallyControlled())
@@ -2535,6 +2564,14 @@ void UHeroGameplayAbility_GunParry::ResetAllDynamicVFX(AHellunaHeroCharacter* He
 			if (SavedHeroCapsuleProfile != NAME_None)
 				HeroCapsule->SetCollisionProfileName(SavedHeroCapsuleProfile);
 			UE_LOG(LogGunParry, Warning, TEXT("[ResetAllDynamicVFX] 히어로 캡슐 안전 복원"));
+		}
+	}
+	// 이동 모드 안전 복원
+	if (UCharacterMovementComponent* CMC = Hero->GetCharacterMovement())
+	{
+		if (CMC->MovementMode == MOVE_None)
+		{
+			CMC->SetMovementMode(MOVE_Walking);
 		}
 	}
 }

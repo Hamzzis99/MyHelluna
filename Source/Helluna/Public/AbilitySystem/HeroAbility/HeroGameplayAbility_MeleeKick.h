@@ -84,6 +84,40 @@ public:
 		meta = (ToolTip = "발차기 AOE Staggered 연쇄 지속 시간(초). 0이면 연쇄 없음."))
 	float KickAOEStaggerDuration = 4.0f;
 
+	// ═══════════════════════════════════════════════════════════
+	// 카메라 연출
+	// ═══════════════════════════════════════════════════════════
+
+	/** 킥 진입 시 SpringArm 길이 배율 (1.0=변화없음, 0.7=줌인) */
+	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick|Camera",
+		meta = (ToolTip = "킥 진입 시 SpringArm 길이 배율. 1.0=변화없음, 0.7=줌인.", ClampMin="0.3", ClampMax="2.0"))
+	float KickArmLengthMultiplier = 0.8f;
+
+	/** 킥 진입 시 FOV 배율 (1.0=변화없음, 0.85=좁힘) */
+	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick|Camera",
+		meta = (ToolTip = "킥 진입 시 FOV 배율. 1.0=변화없음, 0.85=좁힘.", ClampMin="0.5", ClampMax="1.5"))
+	float KickFOVMultiplier = 0.85f;
+
+	/** 킥 진입 카메라 전환 속도 (InterpTo Speed) */
+	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick|Camera",
+		meta = (ToolTip = "킥 진입 시 카메라 ArmLength/FOV 전환 속도.", ClampMin="1.0", ClampMax="30.0"))
+	float KickCameraInterpSpeed = 10.f;
+
+	/** 킥 종료 후 카메라 복귀 속도 */
+	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick|Camera",
+		meta = (ToolTip = "킥 종료 후 원래 ArmLength/FOV로 복귀 속도.", ClampMin="1.0", ClampMax="30.0"))
+	float KickCameraReturnSpeed = 5.f;
+
+	/** 킥 종료 후 카메라 복귀 딜레이(초) */
+	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick|Camera",
+		meta = (ToolTip = "킥 종료 후 카메라 복귀 시작 딜레이(초).", ClampMin="0.0", ClampMax="1.0"))
+	float KickCameraReturnDelay = 0.1f;
+
+	/** 킥 중 SpringArm SocketOffset 오프셋 (캐릭터 기준 로컬 좌표) */
+	UPROPERTY(EditDefaultsOnly, Category = "MeleeKick|Camera",
+		meta = (ToolTip = "킥 중 SpringArm SocketOffset 추가값. X=전후, Y=좌우, Z=상하."))
+	FVector KickCameraSocketOffset = FVector(0.f, 30.f, 20.f);
+
 protected:
 	virtual bool CanActivateAbility(
 		const FGameplayAbilitySpecHandle Handle,
@@ -125,4 +159,16 @@ private:
 	TObjectPtr<AHellunaEnemyCharacter> KickTarget = nullptr;
 
 	bool bKickImpactProcessed = false;
+	bool bSavedOrientRotation = false;
+	bool bSavedUseControllerYaw = false;
+
+	// 카메라 원본 값 저장
+	float SavedKickArmLength = 0.f;
+	float SavedKickFOV = 0.f;
+	FVector SavedKickSocketOffset = FVector::ZeroVector;
+
+	// 카메라 전환 타이머
+	FTimerHandle KickCameraTickTimer;
+	FTimerHandle KickCameraReturnTimer;
+	bool bKickCameraActive = false;
 };

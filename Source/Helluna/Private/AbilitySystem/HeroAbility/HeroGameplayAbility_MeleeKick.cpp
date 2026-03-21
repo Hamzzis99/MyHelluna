@@ -7,7 +7,9 @@
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "AbilitySystemBlueprintLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
 #include "AIController.h"
 
 #include "AbilitySystem/HellunaAbilitySystemComponent.h"
@@ -44,6 +46,18 @@ bool UHeroGameplayAbility_MeleeKick::CanActivateAbility(
 {
 	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
 		return false;
+
+	// 점프/공중 상태에서는 발차기 불가
+	if (ActorInfo && ActorInfo->AvatarActor.IsValid())
+	{
+		if (const ACharacter* Char = Cast<ACharacter>(ActorInfo->AvatarActor.Get()))
+		{
+			if (const UCharacterMovementComponent* CMC = Char->GetCharacterMovement())
+			{
+				if (CMC->IsFalling()) return false;
+			}
+		}
+	}
 
 	// 전방에 Staggered 적이 있을 때만 활성화
 	AHellunaEnemyCharacter* StaggeredEnemy = FindStaggeredEnemy();
@@ -168,10 +182,74 @@ void UHeroGameplayAbility_MeleeKick::ActivateAbility(
 		}
 	}
 
-	// Kicking 태그 부여
+	// Kicking + Invincible 태그 부여 (킥 중 피격 방지)
 	if (UHellunaAbilitySystemComponent* HeroASC = Hero->GetHellunaAbilitySystemComponent())
 	{
 		HeroASC->AddStateTag(HellunaGameplayTags::Hero_State_Kicking);
+		HeroASC->AddStateTag(HellunaGameplayTags::Player_State_Invincible);
+		UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] Kicking + Invincible 태그 부여"));
+	}
+
+	// 킥 중 완전 잠금 (떨림 방지)
+	if (UCharacterMovementComponent* CMC = Hero->GetCharacterMovement())
+	{
+		CMC->StopMovementImmediately();  // Velocity 즉시 0
+		CMC->DisableMovement();           // MOVE_None → 중력+이동 OFF
+		bSavedOrientRotation = CMC->bOrientRotationToMovement;
+		CMC->bOrientRotationToMovement = false;  // CMC 회전 OFF
+		UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 이동+회전 완전 잠금"));
+	}
+	bSavedUseControllerYaw = Hero->bUseControllerRotationYaw;
+	Hero->bUseControllerRotationYaw = false;  // 컨트롤러 회전 OFF
+	Hero->LockMoveInput();  // 입력 차단
+
+	// === 카메라 연출 시작 (CLIENT만) ===
+	if (Hero->IsLocallyControlled())
+	{
+		if (USpringArmComponent* SpringArm = Hero->FindComponentByClass<USpringArmComponent>())
+		{
+			SavedKickArmLength = SpringArm->TargetArmLength;
+			SavedKickSocketOffset = SpringArm->SocketOffset;
+		}
+		if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
+		{
+			if (PC->PlayerCameraManager)
+			{
+				SavedKickFOV = PC->PlayerCameraManager->GetFOVAngle();
+			}
+		}
+
+		const float TargetArmLength = SavedKickArmLength * KickArmLengthMultiplier;
+		const float TargetFOV = SavedKickFOV * KickFOVMultiplier;
+		const FVector TargetSocketOffset = SavedKickSocketOffset + KickCameraSocketOffset;
+
+		bKickCameraActive = true;
+
+		UWorld* World = Hero->GetWorld();
+		World->GetTimerManager().SetTimer(KickCameraTickTimer,
+			FTimerDelegate::CreateWeakLambda(Hero,
+			[this, Hero, TargetArmLength, TargetFOV, TargetSocketOffset]()
+			{
+				if (!bKickCameraActive || !Hero) { return; }
+
+				float DeltaTime = Hero->GetWorld()->GetDeltaSeconds();
+				USpringArmComponent* SA = Hero->FindComponentByClass<USpringArmComponent>();
+				APlayerController* PC = Cast<APlayerController>(Hero->GetController());
+
+				if (SA)
+				{
+					SA->TargetArmLength = FMath::FInterpTo(SA->TargetArmLength, TargetArmLength, DeltaTime, KickCameraInterpSpeed);
+					SA->SocketOffset = FMath::VInterpTo(SA->SocketOffset, TargetSocketOffset, DeltaTime, KickCameraInterpSpeed);
+				}
+				if (PC && PC->PlayerCameraManager)
+				{
+					float CurrentFOV = PC->PlayerCameraManager->GetFOVAngle();
+					PC->PlayerCameraManager->SetFOV(FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, KickCameraInterpSpeed));
+				}
+			}), 0.016f, true);
+
+		UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 진입 — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f, SocketOffset=%s"),
+			SavedKickArmLength, TargetArmLength, SavedKickFOV, TargetFOV, *KickCameraSocketOffset.ToString());
 	}
 
 	// 몽타주 재생
@@ -184,6 +262,10 @@ void UHeroGameplayAbility_MeleeKick::ActivateAbility(
 
 	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this, NAME_None, KickMontage, 1.0f);
+
+	// FullBody 몽타주 재생 (ABP에서 전신 오버라이드)
+	Hero->PlayFullBody = true;
+	UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] Hero.PlayFullBody = true"));
 
 	if (MontageTask)
 	{
@@ -357,14 +439,110 @@ void UHeroGameplayAbility_MeleeKick::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
+	// 취소 시 카메라 즉시 원복
+	if (bWasCancelled && bKickCameraActive && ActorInfo && ActorInfo->AvatarActor.IsValid())
+	{
+		AHellunaHeroCharacter* CamHero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get());
+		if (CamHero && CamHero->IsLocallyControlled())
+		{
+			CamHero->GetWorld()->GetTimerManager().ClearTimer(KickCameraTickTimer);
+			CamHero->GetWorld()->GetTimerManager().ClearTimer(KickCameraReturnTimer);
+			if (USpringArmComponent* SA = CamHero->FindComponentByClass<USpringArmComponent>())
+			{
+				SA->TargetArmLength = SavedKickArmLength;
+				SA->SocketOffset = SavedKickSocketOffset;
+			}
+			if (APlayerController* PC = Cast<APlayerController>(CamHero->GetController()))
+			{
+				if (PC->PlayerCameraManager) PC->PlayerCameraManager->SetFOV(SavedKickFOV);
+			}
+			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 취소 즉시 원복"));
+		}
+		bKickCameraActive = false;
+	}
+
+	// 정상 종료 시 카메라 복귀 (CLIENT만)
+	if (!bWasCancelled && ActorInfo && ActorInfo->AvatarActor.IsValid())
+	{
+		AHellunaHeroCharacter* CamHero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get());
+		if (CamHero && CamHero->IsLocallyControlled() && bKickCameraActive)
+		{
+			CamHero->GetWorld()->GetTimerManager().ClearTimer(KickCameraTickTimer);
+
+			const float ReturnArmLength = SavedKickArmLength;
+			const float ReturnFOV = SavedKickFOV;
+			const FVector ReturnSocketOffset = SavedKickSocketOffset;
+			const float ReturnSpeed = KickCameraReturnSpeed;
+
+			FTimerHandle DelayHandle;
+			CamHero->GetWorld()->GetTimerManager().SetTimer(DelayHandle,
+				FTimerDelegate::CreateWeakLambda(CamHero, [this, CamHero, ReturnArmLength, ReturnFOV, ReturnSocketOffset, ReturnSpeed]()
+				{
+					CamHero->GetWorld()->GetTimerManager().SetTimer(KickCameraReturnTimer,
+						FTimerDelegate::CreateWeakLambda(CamHero, [this, CamHero, ReturnArmLength, ReturnFOV, ReturnSocketOffset, ReturnSpeed]()
+						{
+							float DT = CamHero->GetWorld()->GetDeltaSeconds();
+							USpringArmComponent* SA = CamHero->FindComponentByClass<USpringArmComponent>();
+							APlayerController* PC = Cast<APlayerController>(CamHero->GetController());
+							bool bDone = true;
+
+							if (SA)
+							{
+								SA->TargetArmLength = FMath::FInterpTo(SA->TargetArmLength, ReturnArmLength, DT, ReturnSpeed);
+								SA->SocketOffset = FMath::VInterpTo(SA->SocketOffset, ReturnSocketOffset, DT, ReturnSpeed);
+								if (!FMath::IsNearlyEqual(SA->TargetArmLength, ReturnArmLength, 1.f)) bDone = false;
+							}
+							if (PC && PC->PlayerCameraManager)
+							{
+								float Cur = PC->PlayerCameraManager->GetFOVAngle();
+								PC->PlayerCameraManager->SetFOV(FMath::FInterpTo(Cur, ReturnFOV, DT, ReturnSpeed));
+								if (!FMath::IsNearlyEqual(Cur, ReturnFOV, 1.f)) bDone = false;
+							}
+
+							if (bDone)
+							{
+								if (SA)
+								{
+									SA->TargetArmLength = ReturnArmLength;
+									SA->SocketOffset = ReturnSocketOffset;
+								}
+								if (PC && PC->PlayerCameraManager) PC->PlayerCameraManager->SetFOV(ReturnFOV);
+								CamHero->GetWorld()->GetTimerManager().ClearTimer(KickCameraReturnTimer);
+								UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 복귀 완료 — ArmLength=%.0f, FOV=%.0f"),
+									ReturnArmLength, ReturnFOV);
+							}
+						}), 0.016f, true);
+				}), KickCameraReturnDelay, false);
+
+			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 복귀 시작 — 딜레이=%.2f초"), KickCameraReturnDelay);
+			bKickCameraActive = false;
+		}
+	}
+
 	// Kicking 태그 해제
 	if (ActorInfo && ActorInfo->AvatarActor.IsValid())
 	{
 		if (AHellunaHeroCharacter* Hero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get()))
 		{
+			// FullBody 몽타주 해제
+			Hero->PlayFullBody = false;
+			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] Hero.PlayFullBody = false"));
+
+			// 이동+회전 완전 복원
+			if (UCharacterMovementComponent* CMC = Hero->GetCharacterMovement())
+			{
+				CMC->SetMovementMode(MOVE_Walking);
+				CMC->bOrientRotationToMovement = bSavedOrientRotation;
+			}
+			Hero->bUseControllerRotationYaw = bSavedUseControllerYaw;
+			Hero->UnlockMoveInput();
+			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 이동+회전 잠금 해제"));
+
 			if (UHellunaAbilitySystemComponent* HeroASC = Hero->GetHellunaAbilitySystemComponent())
 			{
 				HeroASC->RemoveStateTag(HellunaGameplayTags::Hero_State_Kicking);
+				HeroASC->RemoveStateTag(HellunaGameplayTags::Player_State_Invincible);
+				UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] Kicking + Invincible 태그 해제"));
 			}
 		}
 	}
