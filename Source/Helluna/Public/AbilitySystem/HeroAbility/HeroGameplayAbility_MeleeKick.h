@@ -177,8 +177,6 @@ private:
 	float SavedKickFOV = 0.f;
 	FVector SavedKickSocketOffset = FVector::ZeroVector;
 
-	// 카메라 전환 타이머
-	FTimerHandle KickCameraTickTimer;
-	FTimerHandle KickCameraReturnTimer;
+	// 카메라 상태
 	bool bKickCameraActive = false;
 };

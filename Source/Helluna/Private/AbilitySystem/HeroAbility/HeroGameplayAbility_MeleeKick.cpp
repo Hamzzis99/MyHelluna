@@ -207,47 +207,27 @@ void UHeroGameplayAbility_MeleeKick::ActivateAbility(
 		{
 			SavedKickArmLength = SpringArm->TargetArmLength;
 			SavedKickSocketOffset = SpringArm->SocketOffset;
+
+			// 즉시 스냅 (InterpTo 틱 제거 — 떨림 방지)
+			SpringArm->TargetArmLength = SavedKickArmLength * KickArmLengthMultiplier;
+			SpringArm->SocketOffset = SavedKickSocketOffset + KickCameraSocketOffset;
 		}
 		if (APlayerController* PC = Cast<APlayerController>(Hero->GetController()))
 		{
 			if (PC->PlayerCameraManager)
 			{
 				SavedKickFOV = PC->PlayerCameraManager->GetFOVAngle();
+				PC->PlayerCameraManager->SetFOV(SavedKickFOV * KickFOVMultiplier);
 			}
 		}
 
-		const float TargetArmLength = SavedKickArmLength * KickArmLengthMultiplier;
-		const float TargetFOV = SavedKickFOV * KickFOVMultiplier;
-		const FVector TargetSocketOffset = SavedKickSocketOffset + KickCameraSocketOffset;
-
 		bKickCameraActive = true;
 
-		UWorld* World = Hero->GetWorld();
-		World->GetTimerManager().SetTimer(KickCameraTickTimer,
-			FTimerDelegate::CreateWeakLambda(Hero,
-			[this, Hero, TargetArmLength, TargetFOV, TargetSocketOffset]()
-			{
-				if (!bKickCameraActive || !Hero) { return; }
-
-				float DeltaTime = Hero->GetWorld()->GetDeltaSeconds();
-				USpringArmComponent* SA = Hero->FindComponentByClass<USpringArmComponent>();
-				APlayerController* PC = Cast<APlayerController>(Hero->GetController());
-
-				if (SA)
-				{
-					SA->TargetArmLength = FMath::FInterpTo(SA->TargetArmLength, TargetArmLength, DeltaTime, KickCameraInterpSpeed);
-					SA->SocketOffset = FMath::VInterpTo(SA->SocketOffset, TargetSocketOffset, DeltaTime, KickCameraInterpSpeed);
-				}
-				if (PC && PC->PlayerCameraManager)
-				{
-					float CurrentFOV = PC->PlayerCameraManager->GetFOVAngle();
-					PC->PlayerCameraManager->SetFOV(FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, KickCameraInterpSpeed));
-				}
-			}), 0.016f, true);
-
-		UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 진입 — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f, SocketOffset=%s"),
-			SavedKickArmLength, TargetArmLength, SavedKickFOV, TargetFOV, *KickCameraSocketOffset.ToString());
+		UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 즉시 스냅 — ArmLength=%.0f→%.0f, FOV=%.0f→%.0f"),
+			SavedKickArmLength, SavedKickArmLength * KickArmLengthMultiplier,
+			SavedKickFOV, SavedKickFOV * KickFOVMultiplier);
 	}
+
 
 	// 몽타주 재생
 	if (!KickMontage)
@@ -441,14 +421,12 @@ void UHeroGameplayAbility_MeleeKick::EndAbility(
 	bool bReplicateEndAbility,
 	bool bWasCancelled)
 {
-	// 취소 시 카메라 즉시 원복
-	if (bWasCancelled && bKickCameraActive && ActorInfo && ActorInfo->AvatarActor.IsValid())
+	// 카메라 즉시 복귀 (취소/정상 종료 모두)
+	if (bKickCameraActive && ActorInfo && ActorInfo->AvatarActor.IsValid())
 	{
 		AHellunaHeroCharacter* CamHero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get());
 		if (CamHero && CamHero->IsLocallyControlled())
 		{
-			CamHero->GetWorld()->GetTimerManager().ClearTimer(KickCameraTickTimer);
-			CamHero->GetWorld()->GetTimerManager().ClearTimer(KickCameraReturnTimer);
 			if (USpringArmComponent* SA = CamHero->FindComponentByClass<USpringArmComponent>())
 			{
 				SA->TargetArmLength = SavedKickArmLength;
@@ -458,67 +436,9 @@ void UHeroGameplayAbility_MeleeKick::EndAbility(
 			{
 				if (PC->PlayerCameraManager) PC->PlayerCameraManager->SetFOV(SavedKickFOV);
 			}
-			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 취소 즉시 원복"));
+			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 즉시 복귀"));
 		}
 		bKickCameraActive = false;
-	}
-
-	// 정상 종료 시 카메라 복귀 (CLIENT만)
-	if (!bWasCancelled && ActorInfo && ActorInfo->AvatarActor.IsValid())
-	{
-		AHellunaHeroCharacter* CamHero = Cast<AHellunaHeroCharacter>(ActorInfo->AvatarActor.Get());
-		if (CamHero && CamHero->IsLocallyControlled() && bKickCameraActive)
-		{
-			CamHero->GetWorld()->GetTimerManager().ClearTimer(KickCameraTickTimer);
-
-			const float ReturnArmLength = SavedKickArmLength;
-			const float ReturnFOV = SavedKickFOV;
-			const FVector ReturnSocketOffset = SavedKickSocketOffset;
-			const float ReturnSpeed = KickCameraReturnSpeed;
-
-			FTimerHandle DelayHandle;
-			CamHero->GetWorld()->GetTimerManager().SetTimer(DelayHandle,
-				FTimerDelegate::CreateWeakLambda(CamHero, [this, CamHero, ReturnArmLength, ReturnFOV, ReturnSocketOffset, ReturnSpeed]()
-				{
-					CamHero->GetWorld()->GetTimerManager().SetTimer(KickCameraReturnTimer,
-						FTimerDelegate::CreateWeakLambda(CamHero, [this, CamHero, ReturnArmLength, ReturnFOV, ReturnSocketOffset, ReturnSpeed]()
-						{
-							float DT = CamHero->GetWorld()->GetDeltaSeconds();
-							USpringArmComponent* SA = CamHero->FindComponentByClass<USpringArmComponent>();
-							APlayerController* PC = Cast<APlayerController>(CamHero->GetController());
-							bool bDone = true;
-
-							if (SA)
-							{
-								SA->TargetArmLength = FMath::FInterpTo(SA->TargetArmLength, ReturnArmLength, DT, ReturnSpeed);
-								SA->SocketOffset = FMath::VInterpTo(SA->SocketOffset, ReturnSocketOffset, DT, ReturnSpeed);
-								if (!FMath::IsNearlyEqual(SA->TargetArmLength, ReturnArmLength, 1.f)) bDone = false;
-							}
-							if (PC && PC->PlayerCameraManager)
-							{
-								float Cur = PC->PlayerCameraManager->GetFOVAngle();
-								PC->PlayerCameraManager->SetFOV(FMath::FInterpTo(Cur, ReturnFOV, DT, ReturnSpeed));
-								if (!FMath::IsNearlyEqual(Cur, ReturnFOV, 1.f)) bDone = false;
-							}
-
-							if (bDone)
-							{
-								if (SA)
-								{
-									SA->TargetArmLength = ReturnArmLength;
-									SA->SocketOffset = ReturnSocketOffset;
-								}
-								if (PC && PC->PlayerCameraManager) PC->PlayerCameraManager->SetFOV(ReturnFOV);
-								CamHero->GetWorld()->GetTimerManager().ClearTimer(KickCameraReturnTimer);
-								UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 복귀 완료 — ArmLength=%.0f, FOV=%.0f"),
-									ReturnArmLength, ReturnFOV);
-							}
-						}), 0.016f, true);
-				}), KickCameraReturnDelay, false);
-
-			UE_LOG(LogMeleeKick, Warning, TEXT("[MeleeKick] 카메라 복귀 시작 — 딜레이=%.2f초"), KickCameraReturnDelay);
-			bKickCameraActive = false;
-		}
 	}
 
 	// Kicking 태그 해제

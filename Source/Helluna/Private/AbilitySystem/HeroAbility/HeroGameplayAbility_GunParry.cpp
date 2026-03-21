@@ -1031,6 +1031,71 @@ void UHeroGameplayAbility_GunParry::OnParryExecutionFireEvent(FGameplayEventData
 	if (Hero->HasAuthority())
 	{
 		ProcessExecutionKill(false);
+
+		// [스태거 시스템] 총 발사 순간 즉시 주변 적 넉백 + Staggered 부여
+		if (Enemy && ParryStaggerRadius > 0.f)
+		{
+			TArray<FOverlapResult> StaggerOverlaps;
+			FCollisionQueryParams StaggerParams;
+			StaggerParams.AddIgnoredActor(Hero);
+			StaggerParams.AddIgnoredActor(Enemy);
+
+			Hero->GetWorld()->OverlapMultiByChannel(
+				StaggerOverlaps,
+				Enemy->GetActorLocation(),
+				FQuat::Identity,
+				ECC_Pawn,
+				FCollisionShape::MakeSphere(ParryStaggerRadius),
+				StaggerParams
+			);
+
+			int32 StaggerCount = 0;
+			for (const FOverlapResult& Overlap : StaggerOverlaps)
+			{
+				AHellunaEnemyCharacter* NearbyEnemy = Cast<AHellunaEnemyCharacter>(Overlap.GetActor());
+				if (!NearbyEnemy) continue;
+
+				if (UHellunaHealthComponent* HC = NearbyEnemy->FindComponentByClass<UHellunaHealthComponent>())
+				{
+					if (HC->IsDead()) continue;
+				}
+
+				FVector KnockDir = (NearbyEnemy->GetActorLocation() - Enemy->GetActorLocation()).GetSafeNormal();
+				KnockDir.Z = 0.3f;
+				KnockDir.Normalize();
+				NearbyEnemy->LaunchCharacter(KnockDir * ParryStaggerKnockback, true, false);
+
+				if (UHellunaAbilitySystemComponent* NearbyASC = NearbyEnemy->GetHellunaAbilitySystemComponent())
+				{
+					NearbyASC->AddStateTag(HellunaGameplayTags::Enemy_State_Staggered);
+					StaggerCount++;
+
+					NearbyEnemy->Multicast_SetStaggerVisual(StaggerOverlayMaterial, StaggerMontage, true);
+
+					FTimerHandle StaggerTimer;
+					TWeakObjectPtr<AHellunaEnemyCharacter> WeakEnemy = NearbyEnemy;
+					const float Duration = ParryStaggerDuration;
+					Hero->GetWorld()->GetTimerManager().SetTimer(StaggerTimer,
+						FTimerDelegate::CreateWeakLambda(NearbyEnemy, [WeakEnemy]()
+						{
+							if (WeakEnemy.IsValid())
+							{
+								if (UHellunaAbilitySystemComponent* ASC = WeakEnemy->GetHellunaAbilitySystemComponent())
+								{
+									ASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_Staggered);
+								}
+								WeakEnemy->Multicast_SetStaggerVisual(nullptr, nullptr, false);
+							}
+						}), Duration, false);
+				}
+			}
+
+			if (StaggerCount > 0)
+			{
+				UE_LOG(LogGunParry, Warning, TEXT("[ParryNotify] 총 발사 즉시 주변 적 %d마리 Staggered (반경=%.0f, 지속=%.1f초)"),
+					StaggerCount, ParryStaggerRadius, ParryStaggerDuration);
+			}
+		}
 	}
 	else
 	{
@@ -1300,75 +1365,6 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 				*KnockbackDir.ToString(), PostParryKnockbackStrength, KnockbackDuration);
 		}
 
-		// [스태거 시스템] 패링 처형 완료 시 주변 적에게 넉백 + Staggered 태그 부여
-		if (Hero->HasAuthority() && !bWasCancelled && Enemy && bKillProcessed && ParryStaggerRadius > 0.f)
-		{
-			TArray<FOverlapResult> StaggerOverlaps;
-			FCollisionQueryParams StaggerParams;
-			StaggerParams.AddIgnoredActor(Hero);
-			StaggerParams.AddIgnoredActor(Enemy);
-
-			Hero->GetWorld()->OverlapMultiByChannel(
-				StaggerOverlaps,
-				Enemy->GetActorLocation(),
-				FQuat::Identity,
-				ECC_Pawn,
-				FCollisionShape::MakeSphere(ParryStaggerRadius),
-				StaggerParams
-			);
-
-			int32 StaggerCount = 0;
-			for (const FOverlapResult& Overlap : StaggerOverlaps)
-			{
-				AHellunaEnemyCharacter* NearbyEnemy = Cast<AHellunaEnemyCharacter>(Overlap.GetActor());
-				if (!NearbyEnemy) continue;
-
-				// 사망 체크 (HealthComponent 기반)
-				if (UHellunaHealthComponent* HC = NearbyEnemy->FindComponentByClass<UHellunaHealthComponent>())
-				{
-					if (HC->IsDead()) continue;
-				}
-
-				// 넉백 방향: 처형 위치에서 바깥으로
-				FVector KnockDir = (NearbyEnemy->GetActorLocation() - Enemy->GetActorLocation()).GetSafeNormal();
-				KnockDir.Z = 0.3f;
-				KnockDir.Normalize();
-				NearbyEnemy->LaunchCharacter(KnockDir * ParryStaggerKnockback, true, false);
-
-				// Staggered 태그 부여 (시간 제한)
-				if (UHellunaAbilitySystemComponent* NearbyASC = NearbyEnemy->GetHellunaAbilitySystemComponent())
-				{
-					NearbyASC->AddStateTag(HellunaGameplayTags::Enemy_State_Staggered);
-					StaggerCount++;
-
-					// [Multicast] Stagger 비주얼 ON — 모든 클라이언트에서 실행
-					NearbyEnemy->Multicast_SetStaggerVisual(StaggerOverlayMaterial, StaggerMontage, true);
-
-					FTimerHandle StaggerTimer;
-					TWeakObjectPtr<AHellunaEnemyCharacter> WeakEnemy = NearbyEnemy;
-					const float Duration = ParryStaggerDuration;
-					Hero->GetWorld()->GetTimerManager().SetTimer(StaggerTimer,
-						FTimerDelegate::CreateWeakLambda(NearbyEnemy, [WeakEnemy]()
-						{
-							if (WeakEnemy.IsValid())
-							{
-								if (UHellunaAbilitySystemComponent* ASC = WeakEnemy->GetHellunaAbilitySystemComponent())
-								{
-									ASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_Staggered);
-								}
-								// [Multicast] Stagger 비주얼 OFF
-								WeakEnemy->Multicast_SetStaggerVisual(nullptr, nullptr, false);
-							}
-						}), Duration, false);
-				}
-			}
-
-			if (StaggerCount > 0)
-			{
-				UE_LOG(LogGunParry, Warning, TEXT("[HandleExecutionFinished] SERVER: 주변 적 %d마리 Staggered (반경=%.0f, 지속=%.1f초)"),
-					StaggerCount, ParryStaggerRadius, ParryStaggerDuration);
-			}
-		}
 	}
 
 	// ═══════════════════════════════════════════════════════════
