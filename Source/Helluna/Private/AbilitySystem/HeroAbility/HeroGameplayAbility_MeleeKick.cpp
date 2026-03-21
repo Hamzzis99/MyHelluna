@@ -373,20 +373,8 @@ void UHeroGameplayAbility_MeleeKick::OnKickImpactEvent(FGameplayEventData Payloa
 					NearbyASC->AddStateTag(HellunaGameplayTags::Enemy_State_Staggered);
 					AOECount++;
 
-					// 오버레이 머티리얼 적용 (반짝임)
-					if (StaggerOverlayMaterial)
-					{
-						if (USkeletalMeshComponent* EnemyMesh = NearbyEnemy->GetMesh())
-						{
-							EnemyMesh->SetOverlayMaterial(StaggerOverlayMaterial);
-						}
-					}
-
-					// Stagger 몽타주 재생
-					if (StaggerMontage)
-					{
-						NearbyEnemy->PlayAnimMontage(StaggerMontage, 1.0f);
-					}
+					// [Multicast] Stagger 비주얼 ON
+					NearbyEnemy->Multicast_SetStaggerVisual(StaggerOverlayMaterial, StaggerMontage, true);
 
 					FTimerHandle StaggerTimer;
 					TWeakObjectPtr<AHellunaEnemyCharacter> WeakEnemy = NearbyEnemy;
@@ -400,13 +388,8 @@ void UHeroGameplayAbility_MeleeKick::OnKickImpactEvent(FGameplayEventData Payloa
 								{
 									ASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_Staggered);
 								}
-								// 오버레이 해제
-								if (USkeletalMeshComponent* Mesh = WeakEnemy->GetMesh())
-								{
-									Mesh->SetOverlayMaterial(nullptr);
-								}
-								// Stagger 몽타주 중단
-								WeakEnemy->StopAnimMontage(nullptr);
+								// [Multicast] Stagger 비주얼 OFF
+								WeakEnemy->Multicast_SetStaggerVisual(nullptr, nullptr, false);
 							}
 						}), Duration, false);
 				}

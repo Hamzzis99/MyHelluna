@@ -1341,17 +1341,8 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 					NearbyASC->AddStateTag(HellunaGameplayTags::Enemy_State_Staggered);
 					StaggerCount++;
 
-					// [디버깅] Staggered 오버레이 머티리얼 적용
-					if (StaggerOverlayMaterial && NearbyEnemy->GetMesh())
-					{
-						NearbyEnemy->GetMesh()->SetOverlayMaterial(StaggerOverlayMaterial);
-					}
-
-					// Stagger 몽타주 재생
-					if (StaggerMontage)
-					{
-						NearbyEnemy->PlayAnimMontage(StaggerMontage, 1.0f);
-					}
+					// [Multicast] Stagger 비주얼 ON — 모든 클라이언트에서 실행
+					NearbyEnemy->Multicast_SetStaggerVisual(StaggerOverlayMaterial, StaggerMontage, true);
 
 					FTimerHandle StaggerTimer;
 					TWeakObjectPtr<AHellunaEnemyCharacter> WeakEnemy = NearbyEnemy;
@@ -1365,13 +1356,8 @@ void UHeroGameplayAbility_GunParry::HandleExecutionFinished(bool bWasCancelled)
 								{
 									ASC->RemoveStateTag(HellunaGameplayTags::Enemy_State_Staggered);
 								}
-								// 오버레이 머티리얼 제거
-								if (WeakEnemy->GetMesh())
-								{
-									WeakEnemy->GetMesh()->SetOverlayMaterial(nullptr);
-								}
-								// Stagger 몽타주 중단
-								WeakEnemy->StopAnimMontage(nullptr);
+								// [Multicast] Stagger 비주얼 OFF
+								WeakEnemy->Multicast_SetStaggerVisual(nullptr, nullptr, false);
 							}
 						}), Duration, false);
 				}
